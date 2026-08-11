@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useIsomorphicLayoutEffect,
+  useReducedMotion,
+} from "motion/react";
 
 const SLOT = { type: "spring", stiffness: 520, damping: 34, mass: 0.45 } as const;
 const FADE = { duration: 0.24, ease: [0.23, 1, 0.32, 1] } as const;
@@ -103,9 +108,61 @@ type TileProps = {
   reduced: boolean;
 };
 
+type FaceStatus = "loading" | "ready" | "error";
+
+function useFace(src?: string) {
+  const ref = useRef<HTMLImageElement>(null);
+  const [state, setState] = useState<{ status: FaceStatus; instant: boolean }>({
+    status: "loading",
+    instant: false,
+  });
+
+  useIsomorphicLayoutEffect(() => {
+    const img = ref.current;
+
+    const set = (status: FaceStatus, instant: boolean) =>
+      setState((prev) =>
+        prev.status === status && prev.instant === instant
+          ? prev
+          : { status, instant },
+      );
+
+    if (!img || !src) {
+      set("loading", false);
+      return;
+    }
+
+    const cached = img.complete && img.naturalWidth > 0;
+    if (img.complete) {
+      set(cached ? "ready" : "error", cached);
+      return;
+    }
+
+    set("loading", false);
+
+    let alive = true;
+    const onLoad = () => {
+      if (alive) set("ready", false);
+    };
+    const onError = () => {
+      if (alive) set("error", false);
+    };
+
+    img.addEventListener("load", onLoad);
+    img.addEventListener("error", onError);
+
+    return () => {
+      alive = false;
+      img.removeEventListener("load", onLoad);
+      img.removeEventListener("error", onError);
+    };
+  }, [src]);
+
+  return { ref, status: state.status, instant: state.instant };
+}
+
 function PresenceTile({ person, index, step, size, zIndex, reduced }: TileProps) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const { ref, status, instant } = useFace(person.src);
 
   return (
     <motion.span
@@ -120,18 +177,17 @@ function PresenceTile({ person, index, step, size, zIndex, reduced }: TileProps)
       <span className={WELL}>
         {initials(person.name)}
 
-        {person.src && !failed ? (
+        {person.src ? (
           <motion.img
+            ref={ref}
             src={person.src}
             alt=""
             width={size}
             height={size}
             decoding="async"
-            onLoad={() => setLoaded(true)}
-            onError={() => setFailed(true)}
             initial={false}
-            animate={{ opacity: loaded ? 1 : 0 }}
-            transition={reduced ? INSTANT : FADE}
+            animate={{ opacity: status === "ready" ? 1 : 0 }}
+            transition={reduced || instant ? INSTANT : FADE}
             className="absolute inset-0 size-full object-cover"
           />
         ) : null}
