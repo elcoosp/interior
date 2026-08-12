@@ -192,6 +192,7 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const uid = useId();
   const reduced = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const liveRef = useRef<HTMLSpanElement>(null);
 
@@ -235,6 +236,7 @@ export function CommandPalette({
 
   const surface = (
     <div
+      ref={panelRef}
       className={`overflow-hidden rounded-[14px] border border-stone-200 bg-white dark:border-white/[0.16] dark:bg-[#1D1D1A] ${
         overlaid
           ? "w-full max-w-[520px] shadow-[0_1px_2px_rgba(28,25,23,0.07),0_28px_56px_-24px_rgba(24,22,20,0.5)] dark:shadow-[0_3px_16px_rgba(0,0,0,0.65)]"
@@ -352,7 +354,16 @@ export function CommandPalette({
   );
 
   if (!overlaid) return surface;
-  return <PaletteLayer open={open} onDismiss={onDismiss} reduced={Boolean(reduced)}>{surface}</PaletteLayer>;
+  return (
+    <PaletteLayer
+      open={open}
+      onDismiss={onDismiss}
+      reduced={Boolean(reduced)}
+      panelRef={panelRef}
+    >
+      {surface}
+    </PaletteLayer>
+  );
 }
 
 const LAYER_EASE = [0.23, 1, 0.32, 1] as const;
@@ -363,14 +374,17 @@ function PaletteLayer({
   open,
   onDismiss,
   reduced,
+  panelRef,
   children,
 }: {
   open: boolean;
   onDismiss?: () => void;
   reduced: boolean;
+  panelRef: React.RefObject<HTMLDivElement | null>;
   children: React.ReactNode;
 }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
+  const downedOutside = useRef(false);
   const leave = useRef(onDismiss);
   leave.current = onDismiss;
 
@@ -415,7 +429,14 @@ function PaletteLayer({
           exit="gone"
           variants={{ closed: {}, open: {}, gone: {} }}
           onPointerDown={(event) => {
-            if (event.target !== event.currentTarget) return;
+            const panel = panelRef.current;
+            downedOutside.current = !panel?.contains(event.target as Node);
+          }}
+          onClick={(event) => {
+            const panel = panelRef.current;
+            if (panel?.contains(event.target as Node)) return;
+            if (!downedOutside.current) return;
+            downedOutside.current = false;
             leave.current?.();
           }}
         >
