@@ -100,10 +100,10 @@ export function useCopyToClipboard({
 		return ok
 	}
 
-	createEffect(() => {
+	createEffect(() => { ticket(); status() }, () => {
 		if (ticket() === 0 || status() === "idle") return
 		const id = setTimeout(() => setStatus("idle"), timeout)
-		onCleanup(() => clearTimeout(id))
+		return (() => clearTimeout(id))
 	})
 
 	return {copy, reset, status, copied: () => status() === "copied"}

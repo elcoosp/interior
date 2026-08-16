@@ -193,7 +193,7 @@ export function createTooltipStore(getTiming: () => TooltipTiming): TooltipStore
 const TooltipGroupContext = createContext<TooltipStore | null>(null)
 
 function useDismissOnBlur(store: TooltipStore, enabled: boolean) {
-	createEffect(() => {
+	createEffect(() => enabled, () => {
 		if (!enabled) return
 		const bail = () => store.reset()
 		const onVisibility = () => {
@@ -201,7 +201,7 @@ function useDismissOnBlur(store: TooltipStore, enabled: boolean) {
 		}
 		window.addEventListener("blur", bail)
 		document.addEventListener("visibilitychange", onVisibility)
-		onCleanup(() => {
+		return (() => {
 			window.removeEventListener("blur", bail)
 			document.removeEventListener("visibilitychange", onVisibility)
 		})
@@ -228,13 +228,13 @@ export function TooltipGroup(props: TooltipGroupProps) {
 
 	const [warm, setWarm] = createSignal(false)
 
-	createEffect(() => {
+	createEffect(() => store.getWarm(), () => {
 		const unsubscribe = store.subscribe(() => setWarm(store.getWarm()))
 		setWarm(store.getWarm())
-		onCleanup(unsubscribe)
+		return (unsubscribe)
 	})
 
-	createEffect(() => {
+	createEffect(() => warm(), () => {
 		const isWarm = warm()
 		props.onWarmChange?.(isWarm)
 	})
@@ -312,10 +312,10 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 		setTravel(store.getTravel())
 	}
 
-	createEffect(() => {
+	createEffect(() => sync(), () => {
 		const unsubscribe = store.subscribe(sync)
 		sync()
-		onCleanup(unsubscribe)
+		return (unsubscribe)
 	})
 
 	onCleanup(() => {
@@ -325,7 +325,7 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 
 	useDismissOnBlur(store, group === null)
 
-	createEffect(() => {
+	createEffect(() => disabled(), () => {
 		if (!disabled()) return
 		store.close(tooltipId, true)
 	})

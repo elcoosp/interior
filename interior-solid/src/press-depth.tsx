@@ -52,7 +52,7 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		setDown(false)
 	}
 
-	createEffect(() => {
+	createEffect(() => tracking(), () => {
 		if (!tracking()) return
 
 		const contains = (event: PointerEvent) => {
@@ -86,7 +86,7 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		window.addEventListener("blur", bail)
 		document.addEventListener("visibilitychange", hidden)
 
-		onCleanup(() => {
+		return (() => {
 			window.removeEventListener("pointermove", move)
 			window.removeEventListener("pointerup", lift)
 			window.removeEventListener("pointercancel", lift)
@@ -95,7 +95,7 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		})
 	})
 
-	createEffect(() => {
+	createEffect(() => disabled(), () => {
 		if (disabled()) stop()
 	})
 

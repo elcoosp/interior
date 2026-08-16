@@ -65,7 +65,7 @@ export function useExpandingSearch(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let openRef = isOpen();
 
-  createEffect(() => {
+  createEffect(() => isOpen(), () => {
     openRef = isOpen();
   });
 
@@ -221,7 +221,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
   });
 
   const [announced, setAnnounced] = createSignal("");
-  createEffect(() => {
+  createEffect(() => { open(); query() }, () => {
     const id = setTimeout(() => {
       if (!open() || query().length === 0 || props.resultCount === undefined) {
         setAnnounced("");
@@ -231,7 +231,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
         `${props.resultCount} ${props.resultCount === 1 ? "result" : "results"} for ${query()}`,
       );
     }, ANNOUNCE_DELAY);
-    onCleanup(() => clearTimeout(id));
+    return (() => clearTimeout(id));
   });
 
   const expanded = () => Math.max(COLLAPSED, track());

@@ -114,20 +114,20 @@ export function useModal(options: UseModalOptions): UseModalResult {
 
 	const close = () => options.onClose()
 
-	createEffect(() => {
+	createEffect(() => options.container?.(), () => {
 		const requested = options.container?.()
 		setTarget(requested === undefined ? document.body : (requested ?? null))
 	})
 
-	createEffect(() => {
+	createEffect(() => { open(); lockScroll() }, () => {
 		const isOpen = open()
 		const locked = lockScroll()
 		if (!isOpen || !locked) return
 		lockDocumentScroll()
-		onCleanup(() => unlockDocumentScroll())
+		return (() => unlockDocumentScroll())
 	})
 
-	createEffect(() => {
+	createEffect(() => { open(); target() }, () => {
 		const isOpen = open()
 		const mount = target()
 		if (!isOpen || !mount) return
@@ -142,7 +142,7 @@ export function useModal(options: UseModalOptions): UseModalResult {
 			child.setAttribute("inert", "")
 		}
 
-		onCleanup(() => {
+		return (() => {
 			for (const [child, previous] of changed) {
 				if (previous === null) child.removeAttribute("inert")
 				else child.setAttribute("inert", previous)
@@ -150,7 +150,7 @@ export function useModal(options: UseModalOptions): UseModalResult {
 		})
 	})
 
-	createEffect(() => {
+	createEffect(() => open(), () => {
 		const isOpen = open()
 		if (!isOpen) return
 		const token = {}
@@ -166,14 +166,14 @@ export function useModal(options: UseModalOptions): UseModalResult {
 		}
 
 		document.addEventListener("keydown", onKeyDown)
-		onCleanup(() => {
+		return (() => {
 			document.removeEventListener("keydown", onKeyDown)
 			const index = stack.indexOf(token)
 			if (index > -1) stack.splice(index, 1)
 		})
 	})
 
-	createEffect(() => {
+	createEffect(() => { open(); target() }, () => {
 		const isOpen = open()
 		const mount = target()
 		if (!isOpen || !mount) return
@@ -184,10 +184,10 @@ export function useModal(options: UseModalOptions): UseModalResult {
 			node.focus({preventScroll: true})
 		}
 		document.addEventListener("focusin", onFocusIn)
-		onCleanup(() => document.removeEventListener("focusin", onFocusIn))
+		return (() => document.removeEventListener("focusin", onFocusIn))
 	})
 
-	createEffect(() => {
+	createEffect(() => { open(); target() }, () => {
 		const isOpen = open()
 		const mount = target()
 		if (!isOpen || !mount) return
@@ -199,7 +199,7 @@ export function useModal(options: UseModalOptions): UseModalResult {
 		const preferred = options.initialFocus?.()
 		;(preferred ?? focusableWithin(node)[0] ?? node).focus({preventScroll: true})
 
-		onCleanup(() => {
+		return (() => {
 			if (previous && previous.isConnected) previous.focus({preventScroll: true})
 		})
 	})

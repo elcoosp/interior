@@ -29,7 +29,7 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 	const [visible, setVisible] = createSignal(false)
 	let shownAt = 0
 
-	createEffect(() => {
+	createEffect(() => { options.ready(); visible(); delay(); minVisible() }, () => {
 		const ready = options.ready()
 		const isVisible = visible()
 		if (!ready) {
@@ -38,14 +38,14 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 				shownAt = performance.now()
 				setVisible(true)
 			}, delay())
-			onCleanup(() => clearTimeout(t))
+			return (() => clearTimeout(t))
 			return
 		}
 
 		if (!isVisible) return
 		const rest = Math.max(0, minVisible() - (performance.now() - shownAt))
 		const t = setTimeout(() => setVisible(false), rest)
-		onCleanup(() => clearTimeout(t))
+		return (() => clearTimeout(t))
 	})
 
 	return {showSkeleton: visible, busy: () => !options.ready()}

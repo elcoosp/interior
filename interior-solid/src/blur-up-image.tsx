@@ -22,7 +22,7 @@ export function useBlurUpImage(props: UseBlurUpImageOptions) {
     instant: boolean;
   }>({ status: "loading", instant: false });
 
-  createEffect(() => {
+  createEffect(() => { ref.current; props.src; props.srcSet }, () => {
     const img = ref.current;
     const src = props.src;
     const srcSet = props.srcSet;
@@ -58,7 +58,7 @@ export function useBlurUpImage(props: UseBlurUpImageOptions) {
     if (img.complete) {
       if (cached) reveal();
       else fail();
-      onCleanup(() => {
+      return (() => {
         alive = false;
       });
       return;
@@ -78,7 +78,7 @@ export function useBlurUpImage(props: UseBlurUpImageOptions) {
     img.addEventListener("load", onLoad);
     img.addEventListener("error", fail);
 
-    onCleanup(() => {
+    return (() => {
       alive = false;
       img.removeEventListener("load", onLoad);
       img.removeEventListener("error", fail);
