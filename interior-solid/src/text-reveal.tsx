@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, onSettled } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, createEffect } from "solid-js";
 import { Motion } from "solid-motionone";
 import { usePrefersReducedMotion } from "./use-prefers-reduced-motion.js";
 
@@ -70,7 +70,7 @@ export function useTextReveal<T extends HTMLElement = HTMLSpanElement>(
     };
   });
 
-  onSettled(() => {
+  createEffect(() => undefined, () => {
     const el = ref.current;
     if (!el) return;
 

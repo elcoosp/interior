@@ -2,7 +2,6 @@ import {
   createEffect,
   createSignal,
   onCleanup,
-  onSettled,
 } from "solid-js";
 import {useId} from "./use-id.js";
 import { Motion } from "solid-motionone";
@@ -205,7 +204,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
   let trackRef!: HTMLDivElement;
   const [track, setTrack] = createSignal(0);
 
-  onSettled(() => {
+  createEffect(() => undefined, () => {
     const el = trackRef;
     if (!el) return;
     const read = (w: number) =>

@@ -1,4 +1,4 @@
-import {createEffect, createSignal, For, onCleanup, onSettled, Show} from "solid-js"
+import {createEffect, createSignal, For, onCleanup, Show} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
@@ -83,7 +83,7 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 
 	const box = () => props.reserve ?? lines() * lineHeight()
 
-	onSettled(() => {
+	createEffect(() => undefined, () => {
 		const el = shell
 		const inner = body
 		if (!el || typeof ResizeObserver === "undefined") return

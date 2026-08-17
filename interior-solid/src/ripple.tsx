@@ -1,4 +1,4 @@
-import {createSignal, For, onCleanup, onSettled} from "solid-js"
+import {createSignal, For, onCleanup, createEffect} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
@@ -114,7 +114,7 @@ export function useRipple({
 		release(id)
 	}
 
-	onSettled(() => {
+	createEffect(() => undefined, () => {
 		const bail = () => releaseAll()
 		const onVisibility = () => document.hidden && releaseAll()
 		window.addEventListener("blur", bail)

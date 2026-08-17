@@ -1,4 +1,4 @@
-import {createSignal, onCleanup, onSettled} from "solid-js"
+import {createSignal, onCleanup, createEffect} from "solid-js"
 
 /**
  * SolidJS equivalent of Framer Motion's `useReducedMotion`.
@@ -12,22 +12,27 @@ import {createSignal, onCleanup, onSettled} from "solid-js"
 export function usePrefersReducedMotion(): () => boolean {
 	const [reduced, setReduced] = createSignal(false)
 
-	onSettled(() => {
-		if (typeof window === "undefined" || !window.matchMedia) return
+	// rc.0 createEffect takes (compute, effect); the effect runs after render
+	// and is a valid scope for onCleanup.
+	createEffect(
+		() => undefined,
+		() => {
+			if (typeof window === "undefined" || !window.matchMedia) return
 
-		const query = window.matchMedia("(prefers-reduced-motion: reduce)")
-		setReduced(query.matches)
+			const query = window.matchMedia("(prefers-reduced-motion: reduce)")
+			setReduced(query.matches)
 
-		const onChange = (event: MediaQueryListEvent) => setReduced(event.matches)
-		// Safari < 14 only supports addListener/removeListener
-		if (query.addEventListener) query.addEventListener("change", onChange)
-		else query.addListener(onChange)
+			const onChange = (event: MediaQueryListEvent) => setReduced(event.matches)
+			// Safari < 14 only supports addListener/removeListener
+			if (query.addEventListener) query.addEventListener("change", onChange)
+			else query.addListener(onChange)
 
-		onCleanup(() => {
-			if (query.removeEventListener) query.removeEventListener("change", onChange)
-			else query.removeListener(onChange)
-		})
-	})
+			onCleanup(() => {
+				if (query.removeEventListener) query.removeEventListener("change", onChange)
+				else query.removeListener(onChange)
+			})
+		},
+	)
 
 	return reduced
 }
