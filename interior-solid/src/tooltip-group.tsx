@@ -372,6 +372,7 @@ export type TooltipProps = {
 	describedBy?: string
 	class?: string
 	contentClass?: string
+	surfaceClassName?: string
 }
 
 export function Tooltip(props: TooltipProps) {
@@ -429,7 +430,7 @@ export function Tooltip(props: TooltipProps) {
 					>
 						<span
 							aria-hidden="true"
-							class="absolute inset-0 rounded-[8px] border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.06),0_6px_16px_-12px_rgba(28,25,23,0.35)] dark:border-white/[0.16] dark:bg-[#1D1D1A] dark:shadow-[0_2px_8px_rgba(0,0,0,0.45)]"
+							class={`absolute inset-0 rounded-[8px] border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.06),0_6px_16px_-12px_rgba(28,25,23,0.35)] dark:border-white/[0.16] dark:bg-[#1D1D1A] dark:shadow-[0_2px_8px_rgba(0,0,0,0.45)] ${props.surfaceClassName ?? ""}`}
 						/>
 						<Motion.span
 							initial={
