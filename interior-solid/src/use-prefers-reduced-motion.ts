@@ -10,18 +10,24 @@ import {createSignal, onCleanup, createEffect} from "solid-js"
  * (using `{ duration: 0 }` instead of removing the animation entirely).
  */
 export function usePrefersReducedMotion(): () => boolean {
-	const [reduced, setReduced] = createSignal(false)
+	// Initial value is read lazily (no reactive write during render). In
+	// non-DOM environments (node/jsdom tests) matchMedia is absent → false.
+	const [reduced, setReduced] = createSignal(
+		typeof window !== "undefined" && window.matchMedia
+			? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+			: false,
+	)
 
 	// rc.0 createEffect takes (compute, effect); the effect runs after render
-	// and is a valid scope for onCleanup.
+	// and is a valid scope for onCleanup. We only attach a listener here — the
+	// only setReduced calls happen inside the event handler (unowned scope),
+	// which avoids REACTIVE_WRITE_IN_OWNED_SCOPE.
 	createEffect(
 		() => undefined,
 		() => {
 			if (typeof window === "undefined" || !window.matchMedia) return
 
 			const query = window.matchMedia("(prefers-reduced-motion: reduce)")
-			setReduced(query.matches)
-
 			const onChange = (event: MediaQueryListEvent) => setReduced(event.matches)
 			// Safari < 14 only supports addListener/removeListener
 			if (query.addEventListener) query.addEventListener("change", onChange)
