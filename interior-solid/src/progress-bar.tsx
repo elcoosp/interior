@@ -13,6 +13,7 @@ export type ProgressBarProps = {
 	pendingLabel?: string
 	completeLabel?: string
 	class?: string
+	fillClassName?: string
 }
 
 export function ProgressBar(props: ProgressBarProps) {
@@ -53,7 +54,7 @@ export function ProgressBar(props: ProgressBarProps) {
 					<Motion.span
 						class="col-start-1 row-start-1 whitespace-nowrap text-[12px] font-medium leading-5"
 						initial={false}
-						animate={{opacity: indeterminate() ? 1 : 0}}
+						animate={{opacity: indeterminate() ? 1 : 0.0}}
 						transition={(reduced() ? INSTANT : CROSSFADE) as any}
 					>
 						{props.pendingLabel ?? "Working"}
@@ -81,7 +82,7 @@ export function ProgressBar(props: ProgressBarProps) {
 				<div class="relative h-[8px] overflow-hidden rounded-[2px]">
 					<Motion.span
 						aria-hidden="true"
-						class="absolute inset-0 block origin-left rounded-[2px] bg-[#4568FF] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(28,25,23,0.2)] dark:bg-[#93B0FF] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.25)]"
+						class="absolute inset-0 block origin-left rounded-[2px] ${props.fillClassName ?? 'bg-[#4568FF] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(28,25,23,0.2)] dark:bg-[#93B0FF] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.25)]'}"
 						initial={false}
 						animate={{scaleX: indeterminate() ? 0 : fraction()}}
 						transition={(reduced() ? INSTANT : FILL) as any}
@@ -90,7 +91,7 @@ export function ProgressBar(props: ProgressBarProps) {
 					{indeterminate() && !reduced() ? (
 						<Motion.span
 							aria-hidden="true"
-							class="absolute inset-y-0 left-0 block w-2/5 rounded-[2px] bg-[#4568FF] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(28,25,23,0.2)] dark:bg-[#93B0FF] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.25)]"
+							class="absolute inset-y-0 left-0 block w-2/5 rounded-[2px] ${props.fillClassName ?? 'bg-[#4568FF] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(28,25,23,0.2)] dark:bg-[#93B0FF] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),inset_0_-1px_0_rgba(0,0,0,0.25)]'}"
 							initial={{x: "-100%", opacity: 0}}
 							animate={{x: "250%", opacity: 1}}
 							transition={{
