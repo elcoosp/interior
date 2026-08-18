@@ -398,7 +398,7 @@ export function Modal(props: ModalProps) {
 											type="button"
 											onClick={() => props.onClose()}
 											aria-label={closeLabel()}
-											class="-mr-1 -mt-1 grid size-7 shrink-0 place-items-center rounded-[7px] text-stone-400 outline-none transition-colors duration-150 hover:bg-stone-100 hover:text-stone-700 focus-visible:bg-[#4568FF]/[0.06] focus-visible:text-stone-700 focus-visible:shadow-[inset_0_0_0_1px_#4568FF] dark:text-stone-500 dark:hover:bg-white/10 dark:hover:text-stone-100 dark:focus-visible:bg-[#93B0FF]/[0.1] dark:focus-visible:text-stone-100 dark:focus-visible:shadow-[inset_0_0_0_1px_#93B0FF]"
+											class="-mr-1 -mt-1 grid size-7 shrink-0 place-items-center rounded-[7px] text-stone-400 outline-none transition-colors duration-150 hover:bg-stone-100 hover:text-stone-700 focus-visible:bg-[var(--color-primary)]/[0.06] focus-visible:text-stone-700 focus-visible:shadow-[inset_0_0_0_1px_var(--color-primary)] dark:text-stone-500 dark:hover:bg-white/10 dark:hover:text-stone-100 dark:focus-visible:bg-[var(--color-primary)]/[0.1] dark:focus-visible:text-stone-100 dark:focus-visible:shadow-[inset_0_0_0_1px_var(--color-primary)]"
 										>
 											{CloseIcon()}
 										</button>

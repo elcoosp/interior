@@ -3,6 +3,7 @@ import {
 	createEffect,
 	createSignal,
 	onCleanup,
+	onSettled,
 	Show,
 	useContext,
 } from "solid-js"
@@ -201,7 +202,7 @@ function useDismissOnBlur(store: TooltipStore, enabled: boolean) {
 		}
 		window.addEventListener("blur", bail)
 		document.addEventListener("visibilitychange", onVisibility)
-		return (() => {
+		onCleanup(() => {
 			window.removeEventListener("blur", bail)
 			document.removeEventListener("visibilitychange", onVisibility)
 		})
@@ -228,11 +229,14 @@ export function TooltipGroup(props: TooltipGroupProps) {
 
 	const [warm, setWarm] = createSignal(false)
 
-	createEffect(() => store.getWarm(), () => {
-		const unsubscribe = store.subscribe(() => setWarm(store.getWarm()))
-		setWarm(store.getWarm())
-		return (unsubscribe)
-	})
+	createEffect(
+		() => true,
+		() => {
+			const unsubscribe = store.subscribe(() => { onSettled(() => { setWarm(store.getWarm()); }); })
+			onSettled(() => { setWarm(store.getWarm()); })
+			onCleanup(() => unsubscribe())
+		},
+	)
 
 	createEffect(() => warm(), () => {
 		const isWarm = warm()
@@ -295,7 +299,16 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 	})
 
 	const tooltipId = `tt-${useId()}`
-	const group = useContext(TooltipGroupContext)
+	// In Solid 2.0 RC, useContext throws when there is no matching provider
+	// (older versions returned the context default). Standalone <Tooltip>
+	// usages (no <TooltipGroup> wrapper) must fall back to a solo store, so
+	// guard the lookup against the throw.
+	let group: TooltipStore | null = null
+	try {
+		group = useContext(TooltipGroupContext)
+	} catch {
+		group = null
+	}
 
 	const solo = group === null ? createTooltipStore(timing) : null
 	const store = group ?? (solo as TooltipStore)
@@ -305,23 +318,26 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 	const [skipped, setSkipped] = createSignal(false)
 	const [travel, setTravel] = createSignal(0)
 
-	const sync = () => {
-		setOpen(store.getActive() === tooltipId)
-		setWarm(store.getWarm())
-		setSkipped(store.getSkipped())
-		setTravel(store.getTravel())
-	}
+		const sync = () => {
+			setOpen(store.getActive() === tooltipId)
+			setWarm(store.getWarm())
+			setSkipped(store.getSkipped())
+			setTravel(store.getTravel())
+		}
 
-	createEffect(() => sync(), () => {
-		const unsubscribe = store.subscribe(sync)
-		sync()
-		return (unsubscribe)
-	})
-
-	onCleanup(() => {
-		store.close(tooltipId, true)
-		solo?.dispose()
-	})
+				let unsubscribe: (() => void) | undefined
+				createEffect(
+					() => tooltipId,
+					() => {
+						unsubscribe = store.subscribe(() => onSettled(sync))
+						onSettled(sync)
+						onCleanup(() => {
+							unsubscribe?.()
+							store.close(tooltipId, true)
+							solo?.dispose()
+						})
+					},
+				)
 
 	useDismissOnBlur(store, group === null)
 

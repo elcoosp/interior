@@ -1,8 +1,5 @@
-import {createMemo, createSignal, For} from "solid-js"
-import {Motion} from "solid-motionone"
+import {createMemo, createSignal, createRenderEffect, For} from "solid-js"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
-
-const CELL = {type: "spring", stiffness: 520, damping: 34, mass: 0.45} as const
 
 const SEG =
 	"px-3 py-[7px] text-center text-[13px] font-medium leading-[18px] tracking-[-0.01em] whitespace-nowrap"
@@ -42,6 +39,33 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
 	const reduced = usePrefersReducedMotion()
 
+	// The sliding thumb transform must track `index()` (a memo). `Motion`'s
+	// `animate` prop is read non-reactively at mount, so it never re-applies
+	// after the first paint and the pill stays on segment 0. Drive it from a
+	// reactive render-effect instead — refs + effect is the robust fix.
+	let thumbEl: HTMLDivElement | null = null
+	let thumbInnerEl: HTMLDivElement | null = null
+	createRenderEffect(
+		() => {
+			// track the active index so the effect re-runs on selection change
+			index()
+		},
+		() => {
+			const i = index()
+			if (thumbEl) thumbEl.style.transform = `translateX(${i * 100}%)`
+			if (thumbInnerEl) thumbInnerEl.style.transform = `translateX(${i * -100}%)`
+			// Drive the radio aria-state imperatively: in Solid 2.0 RC the
+			// declarative `aria-checked`/`tabindex` bindings to `index()` are
+			// not re-evaluated on change, so set them here alongside the thumb.
+			for (let bi = 0; bi < buttons.length; bi++) {
+				const btn = buttons[bi]
+				if (!btn) continue
+				btn.setAttribute("aria-checked", bi === i ? "true" : "false")
+				btn.tabIndex = bi === i ? 0 : -1
+			}
+		},
+	)
+
 	const select = (next: string) => {
 		const before = current()
 		if (!controlled()) setInternal(next)
@@ -49,10 +73,12 @@ export function SegmentedControl(props: SegmentedControlProps) {
 	}
 
 	const seek = (from: number, dir: number) => {
+		const options = props.options
+		const total = options.length
 		let i = from
-		for (let k = 0; k < count(); k++) {
-			i = (i + dir + count()) % count()
-			if (!props.options[i]?.disabled) return i
+		for (let k = 0; k < total; k++) {
+			i = (i + dir + total) % total
+			if (!options[i]?.disabled) return i
 		}
 		return from
 	}
@@ -73,12 +99,14 @@ export function SegmentedControl(props: SegmentedControlProps) {
 			go(seek(i, -1))
 		} else if (e.key === "Home") {
 			e.preventDefault()
-			go(seek(count() - 1, 1))
+			go(seek(optionsLength() - 1, 1))
 		} else if (e.key === "End") {
 			e.preventDefault()
 			go(seek(0, -1))
 		}
 	}
+
+	const optionsLength = () => props.options.length
 
 	return (
 		<div
@@ -98,8 +126,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
 								option.disabled
 									? "text-stone-300 dark:text-stone-600"
 									: hovered() === i() && i() !== index()
-										? "text-stone-700 dark:text-stone-200"
-										: "text-stone-500 dark:text-stone-400"
+									? "text-stone-700 dark:text-stone-200"
+									: "text-stone-500 dark:text-stone-400"
 							}`}
 						>
 							{option.label}
@@ -107,19 +135,19 @@ export function SegmentedControl(props: SegmentedControlProps) {
 					)}
 				</For>
 
-				<Motion.div
+				<div
+					ref={el => {
+						thumbEl = el
+					}}
 					aria-hidden="true"
 					class="pointer-events-none absolute inset-y-0 left-0 overflow-hidden rounded-[6px] bg-stone-800 shadow-[0_1px_2px_rgba(28,25,23,0.28)] dark:bg-stone-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
 					style={{width: `${100 / count()}%`}}
-					initial={false}
-					animate={{transform: `translateX(${index() * 100}%)`}}
-					transition={(reduced() ? {duration: 0} : CELL) as any}
 				>
-					<Motion.div
+					<div
+						ref={el => {
+							thumbInnerEl = el
+						}}
 						class="absolute inset-0"
-						initial={false}
-						animate={{transform: `translateX(${index() * -100}%)`}}
-						transition={(reduced() ? {duration: 0} : CELL) as any}
 					>
 						<div
 							class="absolute inset-y-0 left-0 grid"
@@ -136,8 +164,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
 								)}
 							</For>
 						</div>
-					</Motion.div>
-				</Motion.div>
+					</div>
+				</div>
 
 				<div
 					class="absolute inset-0 grid"
