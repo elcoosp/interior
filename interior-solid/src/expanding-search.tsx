@@ -259,7 +259,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
           event.preventDefault();
           if (open()) inputRef.current?.focus();
         }}
-        class={`absolute inset-y-0 ${props.align === "right" ? "right-0" : "left-0"} overflow-hidden rounded-[10px] border-2 transition-[background-color,border-color,box-shadow] duration-150 ${focused() ? "border-[var(--color-primary)] bg-white dark:border-[var(--color-primary)] dark:bg-[#252522]" : "border-stone-200 bg-stone-100/70 shadow-[inset_0_1px_2px_rgba(28,25,23,0.07)] dark:border-white/[0.08] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"}`}
+        class={`absolute inset-y-0 ${props.align === "right" ? "right-0" : "left-0"} overflow-hidden rounded-[10px] border-2 transition-[background-color,border-color,box-shadow] duration-150 ${focused() ? "border-[#4568FF] bg-white dark:border-[#4568FF] dark:bg-[#252522]" : "border-stone-200 bg-stone-100/70 shadow-[inset_0_1px_2px_rgba(28,25,23,0.07)] dark:border-white/[0.08] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"}`}
       >
         <Motion.input
           ref={(el: HTMLInputElement) => {
@@ -312,7 +312,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
             initial={false}
             animate={{ opacity: filled() ? 1 : 0, scale: filled() ? 1 : 0.86 }}
             transition={cellMotion() as any}
-            class={`grid size-[22px] place-items-center rounded-[6px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary)] dark:text-stone-400 dark:focus-visible:outline-[var(--color-primary)] ${open() && filled() ? "pointer-events-auto" : ""}`}
+            class={`grid size-[22px] place-items-center rounded-[6px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] dark:text-stone-400 dark:focus-visible:outline-[#4568FF] ${open() && filled() ? "pointer-events-auto" : ""}`}
           >
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
               <path
@@ -340,7 +340,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
         initial={false}
         animate={{ x: props.align === "right" && open() ? -(expanded() - COLLAPSED) : 0 }}
         transition={shellMotion() as any}
-        class={`absolute inset-y-0 z-10 grid w-10 place-items-center rounded-[8px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary)] disabled:opacity-50 dark:text-stone-400 dark:focus-visible:outline-[var(--color-primary)] ${props.align === "right" ? "right-0" : "left-0"} ${open() ? "pointer-events-none" : ""}`}
+        class={`absolute inset-y-0 z-10 grid w-10 place-items-center rounded-[8px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] disabled:opacity-50 dark:text-stone-400 dark:focus-visible:outline-[#4568FF] ${props.align === "right" ? "right-0" : "left-0"} ${open() ? "pointer-events-none" : ""}`}
       >
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
           <circle cx="6.4" cy="6.4" r="4.5" stroke="currentColor" stroke-width="1.4" />
