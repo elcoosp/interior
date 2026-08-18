@@ -104,7 +104,7 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 		const ro = new ResizeObserver(check)
 		ro.observe(el)
 		if (inner) ro.observe(inner)
-		onCleanup(() => ro.disconnect())
+		return () => ro.disconnect()
 	})
 
 	return (

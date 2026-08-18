@@ -75,10 +75,10 @@ export function useAsyncAction({
 	}
 
 	createEffect(() => undefined, () => {
-		onCleanup(() => {
+		return () => {
 			alive = false
 			clear()
-		})
+		}
 	})
 
 	return {

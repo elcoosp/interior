@@ -71,14 +71,9 @@ export function SegmentedControl(props: SegmentedControlProps) {
 	// reactive render-effect instead — refs + effect is the robust fix.
 	let thumbEl: HTMLDivElement | null = null
 	let thumbInnerEl: HTMLDivElement | null = null
-	let thumbIndex = 0
 	createRenderEffect(
-		() => {
-			// track the active index so the effect re-runs on selection change
-			thumbIndex = index()
-		},
-		() => {
-			const i = thumbIndex
+		() => index(),
+		(i) => {
 			if (thumbEl) thumbEl.style.transform = `translateX(${i * 100}%)`
 			if (thumbInnerEl) thumbInnerEl.style.transform = `translateX(${i * -100}%)`
 			// Drive the radio aria-state imperatively: in Solid 2.0 RC the

@@ -224,7 +224,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
       if (box) read(box.contentRect.width);
     });
     observer.observe(el);
-    onCleanup(() => observer.disconnect());
+    return () => observer.disconnect();
   });
 
   const [announced, setAnnounced] = createSignal("");

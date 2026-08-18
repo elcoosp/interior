@@ -119,12 +119,12 @@ export function useRipple({
 		const onVisibility = () => document.hidden && releaseAll()
 		window.addEventListener("blur", bail)
 		document.addEventListener("visibilitychange", onVisibility)
-		onCleanup(() => {
+		return () => {
 			window.removeEventListener("blur", bail)
 			document.removeEventListener("visibilitychange", onVisibility)
 			timers.forEach(set => set.forEach(clearTimeout))
 			timers.clear()
-		})
+		}
 	})
 
 	const bind = {

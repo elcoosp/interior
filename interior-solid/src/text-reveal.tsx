@@ -96,7 +96,7 @@ export function useTextReveal<T extends HTMLElement = HTMLSpanElement>(
       { threshold: amount },
     );
     observer.observe(el);
-    onCleanup(() => observer.disconnect());
+    return () => observer.disconnect();
   });
 
   const started = () => {

@@ -202,10 +202,10 @@ function useDismissOnBlur(store: TooltipStore, enabled: boolean) {
 		}
 		window.addEventListener("blur", bail)
 		document.addEventListener("visibilitychange", onVisibility)
-		onCleanup(() => {
+		return () => {
 			window.removeEventListener("blur", bail)
 			document.removeEventListener("visibilitychange", onVisibility)
-		})
+		}
 	})
 }
 
@@ -234,7 +234,7 @@ export function TooltipGroup(props: TooltipGroupProps) {
 		() => {
 			const unsubscribe = store.subscribe(() => { onSettled(() => { setWarm(store.getWarm()); }); })
 			onSettled(() => { setWarm(store.getWarm()); })
-			onCleanup(() => unsubscribe())
+			return () => unsubscribe()
 		},
 	)
 
@@ -331,11 +331,11 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 					() => {
 						unsubscribe = store.subscribe(() => onSettled(sync))
 						onSettled(sync)
-						onCleanup(() => {
+						return () => {
 							unsubscribe?.()
 							store.close(tooltipId, true)
 							solo?.dispose()
-						})
+						}
 					},
 				)
 

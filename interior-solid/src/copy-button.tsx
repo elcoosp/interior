@@ -59,9 +59,9 @@ export function useCopyToClipboard({
 	const failed = onError
 
 	createEffect(() => undefined, () => {
-		onCleanup(() => {
+		return () => {
 			mounted = false
-		})
+		}
 	})
 
 	const reset = () => {
