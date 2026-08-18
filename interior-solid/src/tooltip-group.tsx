@@ -1,6 +1,7 @@
 import {
 	createContext,
 	createEffect,
+	createMemo,
 	createSignal,
 	onCleanup,
 	onSettled,
@@ -403,6 +404,42 @@ export function Tooltip(props: TooltipProps) {
 	})
 	const reduced = usePrefersReducedMotion()
 
+	// Motion props are read by solid-motionone in an UNTRACKED scope during
+	// initial render, so any live signal read here trips STRICT_READ_UNTRACKED.
+	// `reduced()` is already a plain (non-reactive) value. `skipped`/`travel`
+	// are signals synced from the tooltip store, but they only affect the
+	// open animation — and the Motion spans only mount when `open()` is true
+	// (inside <Show>). We snapshot them into plain locals once per render via a
+	// memo (a tracked scope, so reading the signals there is allowed) and feed
+	// the *resolved* config to Motion, never the live signals.
+	const cfg = createMemo(() => {
+		const isReduced = reduced()
+		const isSkipped = skipped()
+		const direction = travel()
+		const enterTransition = isReduced
+			? { duration: 0 }
+			: isSkipped
+				? WARM
+				: RISE
+		const bubbleTransition = isReduced ? { duration: 0 } : SWAP
+		const surfaceInitial = isReduced
+			? false
+			: isSkipped
+				? { opacity: 0, scale: 1, y: 0, filter: "blur(0px)" }
+				: { opacity: 0, scale: 0.9, y: lift(), filter: "blur(4px)" }
+		const bubbleInitial = isReduced
+			? false
+			: isSkipped
+				? { opacity: 0, x: direction * 14, y: 0 }
+				: { opacity: 0, x: 0, y: 9 }
+		return {
+			enterTransition,
+			bubbleTransition,
+			surfaceInitial,
+			bubbleInitial,
+		}
+	})
+
 	const described = () => {
 		const parts = [props.describedBy, open() ? tooltipId : null].filter(Boolean)
 		return parts.length > 0 ? parts.join(" ") : undefined
@@ -423,23 +460,17 @@ export function Tooltip(props: TooltipProps) {
 				class="pointer-events-none absolute left-1/2 z-50 flex w-0 justify-center"
 				style={
 					side() === "top"
-						? {bottom: "calc(100% + 7px)"}
-						: {top: "calc(100% + 7px)"}
+						? { bottom: "calc(100% + 7px)" }
+						: { top: "calc(100% + 7px)" }
 				}
 			>
 				<Show when={open()}>
 					<Motion.span
 						role="tooltip"
 						id={tooltipId}
-						initial={
-							reduced()
-								? false
-								: skipped()
-									? {opacity: 0, scale: 1, y: 0, filter: "blur(0px)"}
-									: {opacity: 0, scale: 0.9, y: lift(), filter: "blur(4px)"}
-						}
-						animate={{opacity: 1, scale: 1, y: 0, filter: "blur(0px)"}}
-						transition={(reduced() ? {duration: 0} : skipped() ? WARM : RISE) as any}
+						initial={() => cfg().surfaceInitial as any}
+						animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+						transition={() => cfg().enterTransition}
 						style={{
 							"transform-origin": side() === "top" ? "50% 100%" : "50% 0%",
 						}}
@@ -450,15 +481,9 @@ export function Tooltip(props: TooltipProps) {
 							class={`absolute inset-0 rounded-[8px] border border-stone-200 bg-white shadow-[0_1px_2px_rgba(28,25,23,0.06),0_6px_16px_-12px_rgba(28,25,23,0.35)] dark:border-white/[0.16] dark:bg-[#1D1D1A] dark:shadow-[0_2px_8px_rgba(0,0,0,0.45)] ${props.surfaceClassName ?? ""}`}
 						/>
 						<Motion.span
-							initial={
-								reduced()
-									? false
-									: skipped()
-										? {opacity: 0, x: travel() * 14, y: 0}
-										: {opacity: 0, x: 0, y: 9}
-							}
-							animate={{opacity: 1, x: 0, y: 0}}
-							transition={(reduced() ? {duration: 0} : SWAP) as any}
+							initial={() => cfg().bubbleInitial as any}
+							animate={{ opacity: 1, x: 0, y: 0 }}
+							transition={() => cfg().bubbleTransition}
 							class="relative block whitespace-nowrap"
 						>
 							{props.label}

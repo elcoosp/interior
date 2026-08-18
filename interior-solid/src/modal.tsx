@@ -369,17 +369,17 @@ export function Modal(props: ModalProps) {
 							<Motion.div
 								aria-hidden="true"
 								initial={{opacity: 0}}
-								animate={backdrop().enter}
-								transition={backdrop().transition as any}
+								animate={() => backdrop().enter}
+								transition={() => backdrop().transition}
 								style={{"touch-action": "none"}}
 								class="absolute inset-0 bg-stone-900/40 dark:bg-black/65"
 							/>
 							<Motion.div
 								{...panelProps}
 								aria-describedby={props.description ? descriptionId : undefined}
-								initial={panel().initial}
-								animate={panel().enter}
-								transition={panel().transition as any}
+								initial={() => panel().initial}
+								animate={() => panel().enter}
+								transition={() => panel().transition}
 								style={{
 									"max-width": `${maxWidth()}px`,
 									"max-height": maxHeight(),

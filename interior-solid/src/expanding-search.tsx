@@ -250,10 +250,14 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
     CLEAR_SLOT + (props.resultCount === undefined ? 0 : COUNT_SLOT);
   const inner = createMemo(() => Math.max(0, expanded() - TEXT_LEFT - rightInset()));
   const filled = createMemo(() => query().length > 0);
-  const shellMotion = createMemo(() => (reduced() ? INSTANT : DISCLOSE));
-  const fadeMotion = createMemo(() => (reduced() ? INSTANT : CROSSFADE));
-  const cellMotion = createMemo(() => (reduced() ? INSTANT : CELL));
-  const triggerMotion = createMemo(() => (reduced() ? INSTANT : { ...CROSSFADE, delay: open() ? 0.06 : 0 }));
+  // Motion configs as PLAIN arrows (not memos). `reduced()` is a non-reactive
+  // value, so these read nothing live. Reading a memo in solid-motionone's
+  // untracked prop getters would trip STRICT_READ_UNTRACKED, so we avoid memos
+  // here entirely.
+  const shellMotion = () => (reduced() ? INSTANT : DISCLOSE);
+  const fadeMotion = () => (reduced() ? INSTANT : CROSSFADE);
+  const cellMotion = () => (reduced() ? INSTANT : CELL);
+  const triggerMotion = () => (reduced() ? INSTANT : { ...CROSSFADE, delay: 0.06 });
 
   return (
     <div
@@ -265,8 +269,8 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
     >
       <Motion.div
         initial={false}
-        animate={{ width: open() ? expanded() : COLLAPSED }}
-        transition={shellMotion() as any}
+        animate={() => ({ width: open() ? expanded() : COLLAPSED })}
+        transition={() => shellMotion()}
         onMouseDown={(event: MouseEvent) => {
           if (event.target !== event.currentTarget) return;
           event.preventDefault();
@@ -294,17 +298,15 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
           onFocus={onInputFocus}
           style={`width: ${inner()}px; left: ${TEXT_LEFT}px`}
           initial={false}
-          animate={{ opacity: open() ? 1 : 0 }}
-          transition={
-            triggerMotion() as any
-          }
+          animate={() => ({ opacity: open() ? 1 : 0 })}
+          transition={() => triggerMotion()}
           class="absolute inset-y-0 bg-transparent text-[13px] leading-9 text-stone-700 outline-none focus-visible:outline-none placeholder:text-stone-400 dark:text-stone-200 dark:placeholder:text-stone-500 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
         />
 
         <Motion.div
           initial={false}
-          animate={{ opacity: open() ? 1 : 0 }}
-          transition={fadeMotion() as any}
+          animate={() => ({ opacity: open() ? 1 : 0 })}
+          transition={() => fadeMotion()}
           class="pointer-events-none absolute inset-y-0 right-[7px] flex items-center gap-1.5"
         >
           {props.resultCount === undefined ? null : (
@@ -323,8 +325,8 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
             aria-label="Clear search"
             aria-controls={inputId}
             initial={false}
-            animate={{ opacity: filled() ? 1 : 0, scale: filled() ? 1 : 0.86 }}
-            transition={cellMotion() as any}
+            animate={() => ({ opacity: filled() ? 1 : 0, scale: filled() ? 1 : 0.86 })}
+            transition={() => cellMotion()}
             class={`grid size-[22px] place-items-center rounded-[6px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] dark:text-stone-400 dark:focus-visible:outline-[#4568FF] ${open() && filled() ? "pointer-events-auto" : ""}`}
           >
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
@@ -351,8 +353,8 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
         aria-expanded={open() ? "true" : "false"}
         onClick={() => expand()}
         initial={false}
-        animate={{ x: props.align === "right" && open() ? -(expanded() - COLLAPSED) : 0 }}
-        transition={shellMotion() as any}
+        animate={() => ({ x: props.align === "right" && open() ? -(expanded() - COLLAPSED) : 0 })}
+        transition={() => shellMotion()}
         class={`absolute inset-y-0 z-10 grid w-10 place-items-center rounded-[8px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] disabled:opacity-50 dark:text-stone-400 dark:focus-visible:outline-[#4568FF] ${props.align === "right" ? "right-0" : "left-0"} ${open() ? "pointer-events-none" : ""}`}
       >
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">

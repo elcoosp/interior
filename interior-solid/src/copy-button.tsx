@@ -176,11 +176,11 @@ export function CopyButton(props: CopyButtonProps) {
 					stroke-linejoin="round"
 					class="col-start-1 row-start-1 size-[14px]"
 					initial={false}
-					animate={{
+					animate={() => ({
 						opacity: status() === "idle" ? 1 : 0,
 						scale: status() === "idle" ? 1 : 0.92,
-					}}
-					transition={fade() as any}
+					})}
+					transition={() => fade()}
 				>
 					<path d="M9.6 5.1V3.7A1.7 1.7 0 0 0 7.9 2H3.7A1.7 1.7 0 0 0 2 3.7v4.2a1.7 1.7 0 0 0 1.7 1.7h1.4" />
 					<rect x="5.1" y="5.1" width="6.9" height="6.9" rx="1.7" />
@@ -195,17 +195,17 @@ export function CopyButton(props: CopyButtonProps) {
 					stroke-linejoin="round"
 					class="col-start-1 row-start-1 size-[14px]"
 					initial={false}
-					animate={{
+					animate={() => ({
 						opacity: status() === "copied" ? 1 : 0,
 						scale: status() === "copied" ? 1 : 0.92,
-					}}
-					transition={fade() as any}
+					})}
+					transition={() => fade()}
 				>
 					<Motion.path
 						d="M2.9 7.4 5.6 10.1 11.1 4"
 						initial={false}
-						animate={{pathLength: status() === "copied" ? 1 : 0} as any}
-						transition={draw() as any}
+						animate={() => ({pathLength: status() === "copied" ? 1 : 0} as any)}
+						transition={() => draw()}
 					/>
 				</Motion.svg>
 
@@ -218,11 +218,11 @@ export function CopyButton(props: CopyButtonProps) {
 					stroke-linejoin="round"
 					class="col-start-1 row-start-1 size-[14px]"
 					initial={false}
-					animate={{
+					animate={() => ({
 						opacity: status() === "error" ? 1 : 0,
 						scale: status() === "error" ? 1 : 0.92,
-					}}
-					transition={fade() as any}
+					})}
+					transition={() => fade()}
 				>
 					<path d="M3.6 3.6 10.4 10.4" />
 					<path d="M10.4 3.6 3.6 10.4" />
@@ -233,12 +233,12 @@ export function CopyButton(props: CopyButtonProps) {
 				{labels().map(([key, text]) => (
 					<Motion.span
 						initial={false}
-						animate={
+						animate={() =>
 							key === status()
 								? {opacity: 1, y: 0, filter: "blur(0px)"}
 								: {opacity: 0, y: 3, filter: "blur(3px)"}
 						}
-						transition={fade() as any}
+						transition={() => fade()}
 						class="col-start-1 row-start-1 whitespace-nowrap"
 					>
 						{text}

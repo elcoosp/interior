@@ -1,4 +1,4 @@
-import {createEffect, createSignal, onCleanup} from "solid-js"
+import {createEffect, createMemo, createSignal, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
@@ -152,6 +152,24 @@ export function PressDepth(props: PressDepthProps) {
 
 	const lean = () => (pressed() && origin() && !reduced() ? origin() : null)
 
+	// Motion configs are read by solid-motionone in an UNTRACKED scope during
+	// initial render, so reading live signals (`pressed`/`origin`) there trips
+	// STRICT_READ_UNTRACKED. Snapshot them into a plain config via a memo
+	// (a tracked scope, so the signal reads inside are allowed) and feed the
+	// resolved values to Motion — never the live signals.
+	const pressCfg = createMemo(() => {
+		const isPressed = pressed()
+		const o = lean()
+		const isReduced = reduced()
+		return {
+			y: isPressed ? depth() : 0,
+			rotateX: o ? -o.y * tilt() : 0,
+			rotateY: o ? o.x * tilt() : 0,
+			overlayOpacity: isPressed ? 0 : 1,
+			transition: isReduced ? { duration: 0 } : PRESS,
+		}
+	})
+
 	return (
 		<button
 			ref={ref}
@@ -166,25 +184,25 @@ export function PressDepth(props: PressDepthProps) {
 		>
 			<span
 				aria-hidden="true"
-				style={{top: `${depth()}px`}}
+				style={{ top: `${depth()}px` }}
 				class="absolute inset-x-0 bottom-0 rounded-[9px] bg-stone-300 dark:bg-white/25"
 			/>
 			<Motion.span
 				initial={false}
 				animate={{
-					y: pressed() ? depth() : 0,
-					rotateX: lean() ? -lean()!.y * tilt() : 0,
-					rotateY: lean() ? lean()!.x * tilt() : 0,
-				}}
-				transition={(reduced() ? {duration: 0} : PRESS) as any}
+					y: () => pressCfg().y,
+					rotateX: () => pressCfg().rotateX,
+					rotateY: () => pressCfg().rotateY,
+				} as any}
+				transition={() => pressCfg().transition}
 				style={"transform-perspective: 340px"}
 				class={`relative inline-flex h-9 items-center justify-center gap-2 rounded-[9px] border border-stone-200 bg-white px-3.5 text-[13px] font-medium text-stone-700 group-focus-visible:ring-2 group-focus-visible:ring-stone-400 dark:border-white/[0.16] dark:bg-[#1D1D1A] dark:text-stone-200 dark:group-focus-visible:ring-stone-500 ${props.class ?? ""}`}
 			>
 				<Motion.span
 					aria-hidden="true"
 					initial={false}
-					animate={{opacity: pressed() ? 0 : 1}}
-					transition={(reduced() ? {duration: 0} : PRESS) as any}
+					animate={() => ({ opacity: pressCfg().overlayOpacity }) as any}
+					transition={() => pressCfg().transition}
 					class="pointer-events-none absolute inset-0 rounded-[9px] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(28,25,23,0.06)] dark:shadow-[inset_0_1.5px_0_rgba(255,255,255,0.09)]"
 				/>
 				{props.children}

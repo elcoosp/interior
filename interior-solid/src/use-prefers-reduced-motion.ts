@@ -1,44 +1,44 @@
-import {createSignal, onCleanup, createEffect} from "solid-js"
+import { onCleanup } from "solid-js"
 
 /**
  * SolidJS equivalent of Framer Motion's `useReducedMotion`.
  *
- * Returns `true` when the user has requested reduced motion via the
- * `(prefers-reduced-motion: reduce)` media query, reactively updating if the
- * preference changes. Every interior component gates its motion behind this so
- * the reduced-motion path still delivers the information but skips the trip
- * (using `{ duration: 0 }` instead of removing the animation entirely).
+ * Returns a STABLE accessor `() => boolean` backed by a plain module variable
+ * (not a signal). Solid 2.0 RC renders every component inside
+ * `untrack(() => Comp(props))`, so reading a *signal* (or memo) here during
+ * the initial render trips STRICT_READ_UNTRACKED — and these reads happen all
+ * over the place (Motion `initial`/`transition` props, TextReveal, …), which
+ * produced a ton of dev warnings. A plain variable read is not a reactive read,
+ * so it never warns. The prefers-reduced-motion preference is read once on
+ * mount (and kept in sync via the media-query listener); live runtime changes
+ * are extremely rare and not worth a reactive signal here.
  */
+let prefersReduced = false
+
+function readPreference(): boolean {
+	if (typeof window === "undefined" || !window.matchMedia) return false
+	return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
 export function usePrefersReducedMotion(): () => boolean {
-	// Initial value is read lazily (no reactive write during render). In
-	// non-DOM environments (node/jsdom tests) matchMedia is absent → false.
-	const [reduced, setReduced] = createSignal(
-		typeof window !== "undefined" && window.matchMedia
-			? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-			: false,
-	)
+	prefersReduced = readPreference()
 
-	// rc.0 createEffect takes (compute, effect); the effect runs after render
-	// and is a valid scope for onCleanup. We only attach a listener here — the
-	// only setReduced calls happen inside the event handler (unowned scope),
-	// which avoids REACTIVE_WRITE_IN_OWNED_SCOPE.
-	createEffect(
-		() => undefined,
-		() => {
-			if (typeof window === "undefined" || !window.matchMedia) return
+	// Subscribe to OS changes. The listener writes a plain variable; there is
+	// no signal, so no re-render is triggered (intentional — see note above).
+	// onCleanup runs in the component body, which has a valid owner.
+	if (typeof window !== "undefined" && window.matchMedia) {
+		const query = window.matchMedia("(prefers-reduced-motion: reduce)")
+		const onChange = (event: MediaQueryListEvent) => {
+			prefersReduced = event.matches
+		}
+		if (query.addEventListener) query.addEventListener("change", onChange)
+		else query.addListener(onChange)
 
-			const query = window.matchMedia("(prefers-reduced-motion: reduce)")
-			const onChange = (event: MediaQueryListEvent) => setReduced(event.matches)
-			// Safari < 14 only supports addListener/removeListener
-			if (query.addEventListener) query.addEventListener("change", onChange)
-			else query.addListener(onChange)
+		onCleanup(() => {
+			if (query.removeEventListener) query.removeEventListener("change", onChange)
+			else query.removeListener(onChange)
+		})
+	}
 
-			onCleanup(() => {
-				if (query.removeEventListener) query.removeEventListener("change", onChange)
-				else query.removeListener(onChange)
-			})
-		},
-	)
-
-	return reduced
+	return () => prefersReduced
 }

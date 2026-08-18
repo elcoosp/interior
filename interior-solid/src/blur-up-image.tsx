@@ -119,7 +119,13 @@ export function BlurUpImage(props: BlurUpImageProps) {
   const { ref, status, instant } = useBlurUpImage(props);
 
   const shown = () => status() === "ready";
-  const still = () => reduced() || instant();
+  // `instant` only matters for the very first paint (a cached image should
+  // appear without the blur-in). After mount it is always false, so snapshot
+  // it once at mount and use the plain boolean — reading the live `instant()`
+  // signal inside these getters would trip STRICT_READ_UNTRACKED, because
+  // solid-motionone reads the getters untracked during initial render.
+  const instantAtMount = instant();
+  const still = () => reduced() || instantAtMount;
   const transition = () => (still() ? INSTANT : DEVELOP);
 
   return (
@@ -156,7 +162,7 @@ export function BlurUpImage(props: BlurUpImageProps) {
         draggable={false}
         class="absolute inset-0 h-full w-full object-cover"
         initial={false}
-        animate={
+        animate={() =>
           still()
             ? { opacity: shown() ? 1 : 0 }
             : shown()
@@ -171,7 +177,7 @@ export function BlurUpImage(props: BlurUpImageProps) {
                   scale: 1.06,
                 }
         }
-        transition={transition() as any}
+        transition={() => transition()}
       />
 
       {status() === "error" ? (
@@ -179,7 +185,7 @@ export function BlurUpImage(props: BlurUpImageProps) {
           aria-hidden="true"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={transition() as any}
+          transition={() => transition()}
           class="absolute inset-0 grid place-items-center bg-white text-stone-400 dark:bg-[#1D1D1A] dark:text-stone-500"
         >
           <svg width="22" height="22" viewBox="0 0 256 256" fill="currentColor">

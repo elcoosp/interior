@@ -238,12 +238,12 @@ export function LoadingButton(props: LoadingButtonProps) {
 					{faces().map((face) => (
 						<Motion.span
 							initial={false}
-							animate={
+							animate={() =>
 								face.key === status()
 									? {opacity: 1, y: 0, filter: "blur(0px)"}
 									: {opacity: 0, y: 3, filter: "blur(3px)"}
 							}
-							transition={fade() as any}
+							transition={() => fade()}
 							class={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 whitespace-nowrap ${face.tone}`}
 						>
 							{face.icon}

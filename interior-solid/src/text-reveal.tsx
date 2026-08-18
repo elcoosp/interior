@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, createEffect } from "solid-js";
+import { createMemo, For } from "solid-js";
 import { Motion } from "solid-motionone";
 import { usePrefersReducedMotion } from "./use-prefers-reduced-motion.js";
 
@@ -32,15 +32,29 @@ export type UseTextRevealOptions = {
   amount?: number;
 };
 
+// Resolve the per-unit step (seconds between units) from the text length.
+// Computed directly from props.text (a plain string — never a signal), so the
+// result can be read inside Motion's prop getters (which solid-motionone reads
+// untracked during initial render) without tripping STRICT_READ_UNTRACKED.
+const resolveStep = (text: string, stagger?: number, maxDuration?: number) => {
+  const words = text.trim().length ? text.trim().split(/\s+/) : [];
+  const total = words.length;
+  if (total <= 1) return 0;
+  const span = Math.max(0, (maxDuration ?? 1.6) - DURATION);
+  return Math.min(stagger ?? 0.055, span / (total - 1));
+};
+
 export function useTextReveal<T extends HTMLElement = HTMLSpanElement>(
   props: UseTextRevealOptions,
 ) {
   const ref = { current: null as T | null };
-  const [inView, setInView] = createSignal(false);
   const reduced = usePrefersReducedMotion();
 
+  // groups/count are consumed by <For>, which reads them in a tracked scope
+  // (For's internal memo), so this memo is safe to read from JSX.
   const data = createMemo(() => {
-    const words = props.text.trim().length ? props.text.trim().split(/\s+/) : [];
+    const value = props.text;
+    const words = value.trim().length ? value.trim().split(/\s+/) : [];
 
     let index = 0;
     const built: TextRevealGroup[] = words.map((word, w) => {
@@ -60,62 +74,15 @@ export function useTextReveal<T extends HTMLElement = HTMLSpanElement>(
       };
     });
 
-    const total = index;
-    const span = Math.max(0, (props.maxDuration ?? 1.6) - DURATION);
-
-    return {
-      groups: built,
-      count: total,
-      step: total > 1 ? Math.min(props.stagger ?? 0.055, span / (total - 1)) : 0,
-    };
+    return { groups: built, count: index };
   });
-
-  createEffect(() => undefined, () => {
-    const el = ref.current;
-    if (!el) return;
-
-    const once = props.once ?? true;
-    const amount = props.amount ?? 0.35;
-
-    if (typeof IntersectionObserver === "undefined") {
-      setInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (!entry) return;
-        if (entry.isIntersecting) {
-          setInView(true);
-          if (once) observer.disconnect();
-        } else if (!once) {
-          setInView(false);
-        }
-      },
-      { threshold: amount },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  });
-
-  const started = () => {
-    const play = props.play ?? true;
-    const startOnView = props.startOnView ?? true;
-    return play && (!startOnView || inView());
-  };
 
   return {
     ref,
     groups: () => data().groups,
-    step: () => data().step,
     count: () => data().count,
-    started,
     reduced: () => Boolean(reduced()),
-    duration: () => {
-      const count = data().count;
-      return count > 1 ? (count - 1) * data().step + DURATION : DURATION;
-    },
+    step: () => resolveStep(props.text, props.stagger, props.maxDuration),
   };
 }
 
@@ -124,9 +91,7 @@ export type TextRevealProps = UseTextRevealOptions & {
 };
 
 export function TextReveal(props: TextRevealProps) {
-  const { ref, groups, step, started, reduced } = useTextReveal<HTMLSpanElement>(
-    props,
-  );
+  const { ref, groups, reduced, step } = useTextReveal<HTMLSpanElement>(props);
 
   return (
     <span
@@ -138,31 +103,38 @@ export function TextReveal(props: TextRevealProps) {
       <span class="sr-only">{props.text}</span>
 
       <span aria-hidden="true">
-        <For each={groups()}>{(group, g) => (
-          <>
-            {g() > 0 ? " " : null}
-            <span class="inline-block whitespace-nowrap align-baseline">
-              <For each={group.units}>{(unit) => (
-                <Motion.span
-                  class="inline-block align-baseline"
-                  initial={reduced() ? false : HIDDEN}
-                  animate={started() ? SHOWN : HIDDEN}
-                  transition={
-                    reduced()
-                      ? { duration: 0 }
-                      : {
-                          duration: DURATION,
-                          ease: EASE,
-                          delay: started() ? unit.index * step() : 0,
-                        } as any
-                  }
-                >
-                  {unit.text}
-                </Motion.span>
-              )}</For>
-            </span>
-          </>
-        )}</For>
+        <For each={groups as any}>
+          {(group, g) => (
+            <>
+              {g() > 0 ? " " : null}
+              <span class="inline-block whitespace-nowrap align-baseline">
+                <For each={group.units}>
+                  {(unit) => (
+                    <Motion.span
+                      class="inline-block align-baseline"
+                      // reduced()/step() read plain values (no signals), so these
+                      // getters are safe to read inside solid-motionone's untracked
+                      // initial render.
+                      initial={reduced() ? false : HIDDEN}
+                      animate={SHOWN}
+                      transition={
+                        reduced()
+                          ? { duration: 0 }
+                          : {
+                              duration: DURATION,
+                              ease: EASE,
+                              delay: unit.index * step(),
+                            } as any
+                      }
+                    >
+                      {unit.text}
+                    </Motion.span>
+                  )}
+                </For>
+              </span>
+            </>
+          )}
+        </For>
       </span>
     </span>
   );
