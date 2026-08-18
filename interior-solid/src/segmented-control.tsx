@@ -24,36 +24,42 @@ function OptionRow(props: {
 	activeValue: () => string
 	hoveredValue: () => string
 }) {
+	const opt = createMemo(() => props.option)
 	const cls = createMemo(() => {
-		if (props.option.disabled)
+		if (opt().disabled)
 			return `${SEG} pointer-events-none text-stone-300 dark:text-stone-600`
-		if (props.hoveredValue() === props.option.value && props.option.value !== props.activeValue())
+		if (opt().value !== props.activeValue() && opt().value === props.hoveredValue())
 			return `${SEG} pointer-events-none text-stone-700 dark:text-stone-200`
 		return `${SEG} pointer-events-none text-stone-500 dark:text-stone-400`
 	})
 	return (
 		<span aria-hidden="true" class={cls()}>
-			{props.option.label}
+			{opt().label}
 		</span>
 	)
 }
 
 export function SegmentedControl(props: SegmentedControlProps) {
-	const optionsLength = () => props.options.length
+	// Reactively derive options so the control updates when the parent passes a
+	// new `options` array (e.g. on a locale switch). Solid components run once,
+	// so a bare `props.options` read in <For> does not re-track across prop
+	// updates; wrapping it in a memo makes <For> re-render with fresh labels.
+	const options = createMemo(() => props.options)
+	const optionsLength = () => options().length
 
 	const [internal, setInternal] = createSignal(
-		props.defaultValue ?? props.options[0]?.value ?? "",
+		props.defaultValue ?? options()[0]?.value ?? "",
 	)
 	const [hovered, setHovered] = createSignal(-1)
 
 	const controlled = () => props.value !== undefined
 	const current = () => (controlled() ? (props.value as string) : internal())
 	const index = createMemo(() => {
-		const found = props.options.findIndex(o => o.value === current())
+		const found = options().findIndex(o => o.value === current())
 		return found < 0 ? 0 : found
 	})
-	const activeValue = () => props.options[index()]?.value ?? ""
-	const hoveredValue = () => props.options[hovered()]?.value ?? ""
+	const activeValue = () => options()[index()]?.value ?? ""
+	const hoveredValue = () => options()[hovered()]?.value ?? ""
 
 	const buttons: (HTMLButtonElement | null)[] = []
 
@@ -94,18 +100,18 @@ export function SegmentedControl(props: SegmentedControlProps) {
 	}
 
 	const seek = (from: number, dir: number) => {
-		const options = props.options
-		const total = options.length
+		const opts = options()
+		const total = opts.length
 		let i = from
 		for (let k = 0; k < total; k++) {
 			i = (i + dir + total) % total
-			if (!options[i]?.disabled) return i
+			if (!opts[i]?.disabled) return i
 		}
 		return from
 	}
 
 	const go = (i: number) => {
-		const option = props.options[i]
+		const option = options()[i]
 		if (!option || option.disabled) return
 		buttons[i]?.focus()
 		select(option.value)
@@ -135,6 +141,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 		onHover: () => void
 		onKey: (e: KeyboardEvent) => void
 	}) {
+		const opt = createMemo(() => props.option)
 		const idx = props.indexValue
 		return (
 			<button
@@ -143,15 +150,15 @@ export function SegmentedControl(props: SegmentedControlProps) {
 				}}
 				type="button"
 				role="radio"
-				aria-checked={props.option.value === activeValue() ? "true" : "false"}
-				aria-disabled={props.option.disabled ? "true" : undefined}
-				tabindex={props.option.value === activeValue() ? 0 : -1}
+				aria-checked={opt().value === activeValue() ? "true" : "false"}
+				aria-disabled={opt().disabled ? "true" : undefined}
+				tabindex={opt().value === activeValue() ? 0 : -1}
 				onClick={props.onSelect}
 				onKeyDown={props.onKey}
 				onPointerEnter={props.onHover}
 				class="cursor-default rounded-[6px] outline-none focus-visible:bg-[#4568FF]/[0.06] focus-visible:shadow-[inset_0_0_0_1px_#4568FF] dark:focus-visible:bg-[#93B0FF]/[0.08] dark:focus-visible:shadow-[inset_0_0_0_1px_#93B0FF]"
 			>
-				<span class="sr-only">{props.option.label}</span>
+				<span class="sr-only">{opt().label}</span>
 			</button>
 		)
 	}
@@ -166,7 +173,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 				class="relative grid"
 				style={{"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`, "touch-action": "manipulation"}}
 			>
-				<For each={props.options}>
+				<For each={options()}>
 					{(option) => (
 						<OptionRow
 							option={option}
@@ -197,7 +204,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 								"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`,
 							}}
 						>
-							<For each={props.options}>
+							<For each={options()}>
 								{option => (
 									<span class={`${SEG} text-stone-50 dark:text-stone-900`}>
 										{option.label}
@@ -213,15 +220,15 @@ export function SegmentedControl(props: SegmentedControlProps) {
 					style={{"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`}}
 					onPointerLeave={() => setHovered(-1)}
 				>
-					<For each={props.options}>
+					<For each={options()}>
 						{(option) => (
 							<SegmentedOptionButton
 								option={option}
-								indexValue={props.options.indexOf(option)}
+								indexValue={options().indexOf(option)}
 								activeValue={activeValue}
 								onSelect={() => !option.disabled && select(option.value)}
-								onHover={() => !option.disabled && setHovered(props.options.indexOf(option))}
-								onKey={(e: KeyboardEvent) => onKeyDown(e, props.options.indexOf(option))}
+								onHover={() => !option.disabled && setHovered(options().indexOf(option))}
+								onKey={(e: KeyboardEvent) => onKeyDown(e, options().indexOf(option))}
 							/>
 						)}
 					</For>
