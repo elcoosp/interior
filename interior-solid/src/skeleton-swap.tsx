@@ -1,4 +1,4 @@
-import {createEffect, createSignal, For, onCleanup, Show} from "solid-js"
+import {createEffect, createSignal, For, onCleanup, onSettled, Show} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
@@ -29,22 +29,32 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 	const [visible, setVisible] = createSignal(false)
 	let shownAt = 0
 
-	createEffect(() => { options.ready(); visible(); delay(); minVisible() }, () => {
-		const ready = options.ready()
-		const isVisible = visible()
+	let skReady = false
+	let skVisible = false
+	let skDelay = 0
+	let skMin = 0
+	createEffect(() => {
+		skReady = options.ready()
+		skVisible = visible()
+		skDelay = delay()
+		skMin = minVisible()
+	}, () => {
+		const ready = skReady
+		const isVisible = skVisible
+		const d = skDelay
+		const min = skMin
 		if (!ready) {
 			if (isVisible) return
 			const t = setTimeout(() => {
 				shownAt = performance.now()
-				setVisible(true)
-			}, delay())
+				onSettled(() => { setVisible(true) })
+			}, d)
 			return (() => clearTimeout(t))
-			return
 		}
 
 		if (!isVisible) return
-		const rest = Math.max(0, minVisible() - (performance.now() - shownAt))
-		const t = setTimeout(() => setVisible(false), rest)
+		const rest = Math.max(0, min - (performance.now() - shownAt))
+		const t = setTimeout(() => onSettled(() => { setVisible(false) }), rest)
 		return (() => clearTimeout(t))
 	})
 
@@ -88,7 +98,7 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 		const inner = body
 		if (!el || typeof ResizeObserver === "undefined") return
 
-		const check = () => setScrollable(el.scrollHeight - el.clientHeight > 1)
+		const check = () => onSettled(() => { setScrollable(el.scrollHeight - el.clientHeight > 1) })
 		check()
 
 		const ro = new ResizeObserver(check)

@@ -1,4 +1,4 @@
-import {createMemo, createSignal, createRenderEffect, For} from "solid-js"
+import {createMemo, createSignal, createRenderEffect, For, onSettled} from "solid-js"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
 const SEG =
@@ -19,9 +19,27 @@ export type SegmentedControlProps = {
 	class?: string
 }
 
+function OptionRow(props: {
+	option: SegmentedOption
+	activeValue: () => string
+	hoveredValue: () => string
+}) {
+	const cls = createMemo(() => {
+		if (props.option.disabled)
+			return `${SEG} pointer-events-none text-stone-300 dark:text-stone-600`
+		if (props.hoveredValue() === props.option.value && props.option.value !== props.activeValue())
+			return `${SEG} pointer-events-none text-stone-700 dark:text-stone-200`
+		return `${SEG} pointer-events-none text-stone-500 dark:text-stone-400`
+	})
+	return (
+		<span aria-hidden="true" class={cls()}>
+			{props.option.label}
+		</span>
+	)
+}
+
 export function SegmentedControl(props: SegmentedControlProps) {
-	const count = createMemo(() => Math.max(1, props.options.length))
-	const template = createMemo(() => `repeat(${count()}, minmax(0, 1fr))`)
+	const optionsLength = () => props.options.length
 
 	const [internal, setInternal] = createSignal(
 		props.defaultValue ?? props.options[0]?.value ?? "",
@@ -34,6 +52,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
 		const found = props.options.findIndex(o => o.value === current())
 		return found < 0 ? 0 : found
 	})
+	const activeValue = () => props.options[index()]?.value ?? ""
+	const hoveredValue = () => props.options[hovered()]?.value ?? ""
 
 	const buttons: (HTMLButtonElement | null)[] = []
 
@@ -45,13 +65,14 @@ export function SegmentedControl(props: SegmentedControlProps) {
 	// reactive render-effect instead — refs + effect is the robust fix.
 	let thumbEl: HTMLDivElement | null = null
 	let thumbInnerEl: HTMLDivElement | null = null
+	let thumbIndex = 0
 	createRenderEffect(
 		() => {
 			// track the active index so the effect re-runs on selection change
-			index()
+			thumbIndex = index()
 		},
 		() => {
-			const i = index()
+			const i = thumbIndex
 			if (thumbEl) thumbEl.style.transform = `translateX(${i * 100}%)`
 			if (thumbInnerEl) thumbInnerEl.style.transform = `translateX(${i * -100}%)`
 			// Drive the radio aria-state imperatively: in Solid 2.0 RC the
@@ -106,7 +127,34 @@ export function SegmentedControl(props: SegmentedControlProps) {
 		}
 	}
 
-	const optionsLength = () => props.options.length
+	function SegmentedOptionButton(props: {
+		option: SegmentedOption
+		indexValue: number
+		activeValue: () => string
+		onSelect: () => void
+		onHover: () => void
+		onKey: (e: KeyboardEvent) => void
+	}) {
+		const idx = props.indexValue
+		return (
+			<button
+				ref={node => {
+					buttons[idx] = node
+				}}
+				type="button"
+				role="radio"
+				aria-checked={props.option.value === activeValue() ? "true" : "false"}
+				aria-disabled={props.option.disabled ? "true" : undefined}
+				tabindex={props.option.value === activeValue() ? 0 : -1}
+				onClick={props.onSelect}
+				onKeyDown={props.onKey}
+				onPointerEnter={props.onHover}
+				class="cursor-default rounded-[6px] outline-none focus-visible:bg-[#4568FF]/[0.06] focus-visible:shadow-[inset_0_0_0_1px_#4568FF] dark:focus-visible:bg-[#93B0FF]/[0.08] dark:focus-visible:shadow-[inset_0_0_0_1px_#93B0FF]"
+			>
+				<span class="sr-only">{props.option.label}</span>
+			</button>
+		)
+	}
 
 	return (
 		<div
@@ -116,22 +164,15 @@ export function SegmentedControl(props: SegmentedControlProps) {
 		>
 			<div
 				class="relative grid"
-				style={{"grid-template-columns": template(), "touch-action": "manipulation"}}
+				style={{"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`, "touch-action": "manipulation"}}
 			>
 				<For each={props.options}>
-					{(option, i) => (
-						<span
-							aria-hidden="true"
-							class={`${SEG} pointer-events-none ${
-								option.disabled
-									? "text-stone-300 dark:text-stone-600"
-									: hovered() === i() && i() !== index()
-									? "text-stone-700 dark:text-stone-200"
-									: "text-stone-500 dark:text-stone-400"
-							}`}
-						>
-							{option.label}
-						</span>
+					{(option) => (
+						<OptionRow
+							option={option}
+							activeValue={activeValue}
+							hoveredValue={hoveredValue}
+						/>
 					)}
 				</For>
 
@@ -141,7 +182,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 					}}
 					aria-hidden="true"
 					class="pointer-events-none absolute inset-y-0 left-0 overflow-hidden rounded-[6px] bg-stone-800 shadow-[0_1px_2px_rgba(28,25,23,0.28)] dark:bg-stone-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
-					style={{width: `${100 / count()}%`}}
+					style={{width: `${100 / optionsLength()}%`}}
 				>
 					<div
 						ref={el => {
@@ -152,8 +193,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
 						<div
 							class="absolute inset-y-0 left-0 grid"
 							style={{
-								width: `${count() * 100}%`,
-								"grid-template-columns": template(),
+								width: `${optionsLength() * 100}%`,
+								"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`,
 							}}
 						>
 							<For each={props.options}>
@@ -169,27 +210,19 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
 				<div
 					class="absolute inset-0 grid"
-					style={{"grid-template-columns": template()}}
+					style={{"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`}}
 					onPointerLeave={() => setHovered(-1)}
 				>
 					<For each={props.options}>
-						{(option, i) => (
-							<button
-								ref={node => {
-									buttons[i()] = node
-								}}
-								type="button"
-								role="radio"
-								aria-checked={i() === index() ? "true" : "false"}
-								aria-disabled={option.disabled ? "true" : undefined}
-								tabindex={i() === index() ? 0 : -1}
-								onClick={() => !option.disabled && select(option.value)}
-								onKeyDown={e => onKeyDown(e, i())}
-								onPointerEnter={() => !option.disabled && setHovered(i())}
-								class="cursor-default rounded-[6px] outline-none focus-visible:bg-[#4568FF]/[0.06] focus-visible:shadow-[inset_0_0_0_1px_#4568FF] dark:focus-visible:bg-[#93B0FF]/[0.08] dark:focus-visible:shadow-[inset_0_0_0_1px_#93B0FF]"
-							>
-								<span class="sr-only">{option.label}</span>
-							</button>
+						{(option) => (
+							<SegmentedOptionButton
+								option={option}
+								indexValue={props.options.indexOf(option)}
+								activeValue={activeValue}
+								onSelect={() => !option.disabled && select(option.value)}
+								onHover={() => !option.disabled && setHovered(props.options.indexOf(option))}
+								onKey={(e: KeyboardEvent) => onKeyDown(e, props.options.indexOf(option))}
+							/>
 						)}
 					</For>
 				</div>

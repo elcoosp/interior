@@ -1,4 +1,4 @@
-import {createEffect, createRenderEffect, createSignal, onCleanup} from "solid-js"
+import {createEffect, createRenderEffect, createSignal, onCleanup, onSettled} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
@@ -102,18 +102,22 @@ export function useCopyToClipboard({
 		return ok
 	}
 
+		let lastT = 0
+		let lastS = "idle"
 		createRenderEffect(
 			() => {
 				// track the dependencies so the effect re-runs on change
-				ticket()
-				status()
+				lastT = ticket()
+				lastS = status()
 			},
 			() => {
-				const t = ticket()
-				const s = status()
-				if (t === 0 || s === "idle") return
-				const id = setTimeout(() => setStatus("idle"), timeout)
-				return () => clearTimeout(id)
+				const t = lastT
+				const s = lastS
+				onSettled(() => {
+					if (t === 0 || s === "idle") return
+					const id = setTimeout(() => setStatus("idle"), timeout)
+					onCleanup(() => clearTimeout(id))
+				})
 			},
 		)
 

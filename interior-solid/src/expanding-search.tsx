@@ -2,6 +2,8 @@ import {
   createEffect,
   createSignal,
   onCleanup,
+  onSettled,
+  createMemo,
 } from "solid-js";
 import {useId} from "./use-id.js";
 import { Motion } from "solid-motionone";
@@ -60,12 +62,13 @@ export function useExpandingSearch(
   const isOpen = () => props.open ?? ownOpen();
 
   const inputRef = { current: null as HTMLInputElement | null };
-  const triggerRef = { current: null as HTMLButtonElement | null };
+  let triggerRef = { current: null as HTMLButtonElement | null };
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let openRef = isOpen();
+  let openRef = props.open ?? false;
+  let openCompute = false;
 
-  createEffect(() => isOpen(), () => {
-    openRef = isOpen();
+  createEffect(() => { openCompute = isOpen() }, () => {
+    openRef = openCompute;
   });
 
   onCleanup(() => {
@@ -201,14 +204,19 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
     onInputFocus,
   } = useExpandingSearch(props);
 
+  const focusedMemo = createMemo(() => focused());
+
   let trackRef!: HTMLDivElement;
   const [track, setTrack] = createSignal(0);
 
   createEffect(() => undefined, () => {
     const el = trackRef;
     if (!el) return;
-    const read = (w: number) =>
-      setTrack((prev) => (Math.abs(prev - w) < 0.5 ? prev : w));
+    const read = (w: number) => {
+      onSettled(() => {
+        setTrack((prev) => (Math.abs(prev - w) < 0.5 ? prev : w));
+      });
+    };
     read(el.getBoundingClientRect().width);
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver((entries) => {
@@ -220,27 +228,32 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
   });
 
   const [announced, setAnnounced] = createSignal("");
-  createEffect(() => { open(); query() }, () => {
+  let annOpen = false;
+  let annQuery = "";
+  createEffect(() => { annOpen = open(); annQuery = query() }, () => {
+    const o = annOpen;
+    const q = annQuery;
     const id = setTimeout(() => {
-      if (!open() || query().length === 0 || props.resultCount === undefined) {
+      if (!o || q.length === 0 || props.resultCount === undefined) {
         setAnnounced("");
         return;
       }
       setAnnounced(
-        `${props.resultCount} ${props.resultCount === 1 ? "result" : "results"} for ${query()}`,
+        `${props.resultCount} ${props.resultCount === 1 ? "result" : "results"} for ${q}`,
       );
     }, ANNOUNCE_DELAY);
     return (() => clearTimeout(id));
   });
 
-  const expanded = () => Math.max(COLLAPSED, track());
+  const expanded = createMemo(() => Math.max(COLLAPSED, track()));
   const rightInset = () =>
     CLEAR_SLOT + (props.resultCount === undefined ? 0 : COUNT_SLOT);
-  const inner = () => Math.max(0, expanded() - TEXT_LEFT - rightInset());
-  const filled = () => query().length > 0;
-  const shellMotion = () => (reduced() ? INSTANT : DISCLOSE);
-  const fadeMotion = () => (reduced() ? INSTANT : CROSSFADE);
-  const cellMotion = () => (reduced() ? INSTANT : CELL);
+  const inner = createMemo(() => Math.max(0, expanded() - TEXT_LEFT - rightInset()));
+  const filled = createMemo(() => query().length > 0);
+  const shellMotion = createMemo(() => (reduced() ? INSTANT : DISCLOSE));
+  const fadeMotion = createMemo(() => (reduced() ? INSTANT : CROSSFADE));
+  const cellMotion = createMemo(() => (reduced() ? INSTANT : CELL));
+  const triggerMotion = createMemo(() => (reduced() ? INSTANT : { ...CROSSFADE, delay: open() ? 0.06 : 0 }));
 
   return (
     <div
@@ -259,7 +272,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
           event.preventDefault();
           if (open()) inputRef.current?.focus();
         }}
-        class={`absolute inset-y-0 ${props.align === "right" ? "right-0" : "left-0"} overflow-hidden rounded-[10px] border-2 transition-[background-color,border-color,box-shadow] duration-150 ${focused() ? "border-[#4568FF] bg-white dark:border-[#4568FF] dark:bg-[#252522]" : "border-stone-200 bg-stone-100/70 shadow-[inset_0_1px_2px_rgba(28,25,23,0.07)] dark:border-white/[0.08] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"}`}
+        class={`absolute inset-y-0 ${props.align === "right" ? "right-0" : "left-0"} overflow-hidden rounded-[10px] border-2 transition-[background-color,border-color,box-shadow] duration-150 ${focusedMemo() ? "border-[#4568FF] bg-white dark:border-[#4568FF] dark:bg-[#252522]" : "border-stone-200 bg-stone-100/70 shadow-[inset_0_1px_2px_rgba(28,25,23,0.07)] dark:border-white/[0.08] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"}`}
       >
         <Motion.input
           ref={(el: HTMLInputElement) => {
@@ -283,7 +296,7 @@ export function ExpandingSearch(props: ExpandingSearchProps) {
           initial={false}
           animate={{ opacity: open() ? 1 : 0 }}
           transition={
-            (reduced() ? INSTANT : { ...CROSSFADE, delay: open() ? 0.06 : 0 }) as any
+            triggerMotion() as any
           }
           class="absolute inset-y-0 bg-transparent text-[13px] leading-9 text-stone-700 outline-none focus-visible:outline-none placeholder:text-stone-400 dark:text-stone-200 dark:placeholder:text-stone-500 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
         />

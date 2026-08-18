@@ -238,9 +238,9 @@ export function TooltipGroup(props: TooltipGroupProps) {
 		},
 	)
 
-	createEffect(() => warm(), () => {
-		const isWarm = warm()
-		props.onWarmChange?.(isWarm)
+	let ttWarm = false
+	createEffect(() => { ttWarm = warm() }, () => {
+		props.onWarmChange?.(ttWarm)
 	})
 
 	onCleanup(() => store.dispose())
@@ -341,8 +341,9 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 
 	useDismissOnBlur(store, group === null)
 
-	createEffect(() => disabled(), () => {
-		if (!disabled()) return
+	let ttDisabled = false
+	createEffect(() => { ttDisabled = disabled() }, () => {
+		if (!ttDisabled) return
 		store.close(tooltipId, true)
 	})
 

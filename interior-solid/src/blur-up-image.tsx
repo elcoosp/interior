@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, onSettled } from "solid-js";
 import { Motion } from "solid-motionone";
 import { usePrefersReducedMotion } from "./use-prefers-reduced-motion.js";
 
@@ -27,12 +27,15 @@ export function useBlurUpImage(props: UseBlurUpImageOptions) {
     const src = props.src;
     const srcSet = props.srcSet;
 
-    const set = (status: BlurUpStatus, instant: boolean) =>
-      setState((prev) =>
-        prev.status === status && prev.instant === instant
-          ? prev
-          : { status, instant },
-      );
+    const set = (status: BlurUpStatus, instant: boolean) => {
+      onSettled(() => {
+        setState((prev) =>
+          prev.status === status && prev.instant === instant
+            ? prev
+            : { status, instant },
+        );
+      });
+    };
 
     if (!img || !src) {
       set("loading", false);

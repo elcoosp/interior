@@ -52,8 +52,9 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		setDown(false)
 	}
 
-	createEffect(() => tracking(), () => {
-		if (!tracking()) return
+	let pdTracking = false
+	createEffect(() => { pdTracking = tracking() }, () => {
+		if (!pdTracking) return
 
 		const contains = (event: PointerEvent) => {
 			const el = nodeEl
@@ -95,8 +96,9 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		})
 	})
 
-	createEffect(() => disabled(), () => {
-		if (disabled()) stop()
+	let pdDisabled = false
+	createEffect(() => { pdDisabled = disabled() }, () => {
+		if (pdDisabled) stop()
 	})
 
 	const ref = (next: HTMLElement | null) => {

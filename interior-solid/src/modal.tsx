@@ -1,4 +1,4 @@
-import {createEffect, createSignal, onCleanup, Show} from "solid-js"
+import {createEffect, createSignal, onCleanup, onSettled, Show} from "solid-js"
 import {Portal} from "@solidjs/web"
 import {Motion} from "solid-motionone"
 import {useId} from "./use-id.js"
@@ -116,20 +116,26 @@ export function useModal(options: UseModalOptions): UseModalResult {
 
 	createEffect(() => options.container?.(), () => {
 		const requested = options.container?.()
-		setTarget(requested === undefined ? document.body : (requested ?? null))
+		onSettled(() => {
+			setTarget(requested === undefined ? document.body : (requested ?? null))
+		})
 	})
 
-	createEffect(() => { open(); lockScroll() }, () => {
-		const isOpen = open()
-		const locked = lockScroll()
+	let lockOpen = false
+	let lockLocked = false
+	createEffect(() => { lockOpen = open(); lockLocked = lockScroll() }, () => {
+		const isOpen = lockOpen
+		const locked = lockLocked
 		if (!isOpen || !locked) return
 		lockDocumentScroll()
 		return (() => unlockDocumentScroll())
 	})
 
-	createEffect(() => { open(); target() }, () => {
-		const isOpen = open()
-		const mount = target()
+	let inertOpen = false
+	let inertMount: HTMLElement | null = null
+	createEffect(() => { inertOpen = open(); inertMount = target() }, () => {
+		const isOpen = inertOpen
+		const mount = inertMount
 		if (!isOpen || !mount) return
 		const node = overlay
 		const parent = node?.parentElement
@@ -150,8 +156,9 @@ export function useModal(options: UseModalOptions): UseModalResult {
 		})
 	})
 
-	createEffect(() => open(), () => {
-		const isOpen = open()
+	let escOpen = false
+	createEffect(() => { escOpen = open() }, () => {
+		const isOpen = escOpen
 		if (!isOpen) return
 		const token = {}
 		stack.push(token)
@@ -173,9 +180,11 @@ export function useModal(options: UseModalOptions): UseModalResult {
 		})
 	})
 
-	createEffect(() => { open(); target() }, () => {
-		const isOpen = open()
-		const mount = target()
+	let focusOpen = false
+	let focusMount: HTMLElement | null = null
+	createEffect(() => { focusOpen = open(); focusMount = target() }, () => {
+		const isOpen = focusOpen
+		const mount = focusMount
 		if (!isOpen || !mount) return
 		const node = panel
 		const onFocusIn = (event: FocusEvent) => {
@@ -187,9 +196,11 @@ export function useModal(options: UseModalOptions): UseModalResult {
 		return (() => document.removeEventListener("focusin", onFocusIn))
 	})
 
-	createEffect(() => { open(); target() }, () => {
-		const isOpen = open()
-		const mount = target()
+	let initOpen = false
+	let initMount: HTMLElement | null = null
+	createEffect(() => { initOpen = open(); initMount = target() }, () => {
+		const isOpen = initOpen
+		const mount = initMount
 		if (!isOpen || !mount) return
 		const node = panel
 		if (!node) return
