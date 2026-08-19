@@ -10,6 +10,11 @@ export type SegmentedOption = {
 	disabled?: boolean
 }
 
+// Indexed variant used internally only — carries a stable _idx so the button
+// index can be passed as a plain (non-reactive) number, avoiding a memo read
+// inside the untracked component render (STRICT_READ_UNTRACKED in Solid 2.0 RC).
+type SegmentedOptionIndexed = SegmentedOption & { _idx: number }
+
 export type SegmentedControlProps = {
 	options: SegmentedOption[]
 	label: string
@@ -46,6 +51,12 @@ export function SegmentedControl(props: SegmentedControlProps) {
 	// updates; wrapping it in a memo makes <For> re-render with fresh labels.
 	const options = createMemo(() => props.options)
 	const optionsLength = () => options().length
+	// Precompute a stable index per option inside a memo (tracked read of
+	// `options()`), so the per-button index can be passed as a plain number
+	// instead of re-reading the `options()` memo during each button's render.
+	const indexedOptions = createMemo<SegmentedOptionIndexed[]>(() =>
+		options().map((o, i) => ({ ...o, _idx: i })),
+	)
 
 	const [internal, setInternal] = createSignal(
 		props.defaultValue ?? options()[0]?.value ?? "",
@@ -129,7 +140,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 	}
 
 	function SegmentedOptionButton(props: {
-		option: SegmentedOption
+		option: SegmentedOptionIndexed
 		indexValue: number
 		activeValue: () => string
 		onSelect: () => void
@@ -145,9 +156,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 				}}
 				type="button"
 				role="radio"
-				aria-checked={opt().value === activeValue() ? "true" : "false"}
 				aria-disabled={opt().disabled ? "true" : undefined}
-				tabindex={opt().value === activeValue() ? 0 : -1}
 				onClick={props.onSelect}
 				onKeyDown={props.onKey}
 				onPointerEnter={props.onHover}
@@ -168,7 +177,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 				class="relative grid"
 				style={{"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`, "touch-action": "manipulation"}}
 			>
-				<For each={options()}>
+				<For each={indexedOptions as any}>
 					{(option) => (
 						<OptionRow
 							option={option}
@@ -199,7 +208,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 								"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`,
 							}}
 						>
-							<For each={options()}>
+							<For each={indexedOptions as any}>
 								{option => (
 									<span class={`${SEG} text-stone-50 dark:text-stone-900`}>
 										{option.label}
@@ -215,15 +224,15 @@ export function SegmentedControl(props: SegmentedControlProps) {
 					style={{"grid-template-columns": `repeat(${optionsLength()}, minmax(0, 1fr))`}}
 					onPointerLeave={() => setHovered(-1)}
 				>
-					<For each={options()}>
+					<For each={indexedOptions as any}>
 						{(option) => (
 							<SegmentedOptionButton
 								option={option}
-								indexValue={options().indexOf(option)}
+								indexValue={option._idx}
 								activeValue={activeValue}
 								onSelect={() => !option.disabled && select(option.value)}
-								onHover={() => !option.disabled && setHovered(options().indexOf(option))}
-								onKey={(e: KeyboardEvent) => onKeyDown(e, options().indexOf(option))}
+								onHover={() => !option.disabled && setHovered(option._idx)}
+								onKey={(e: KeyboardEvent) => onKeyDown(e, option._idx)}
 							/>
 						)}
 					</For>

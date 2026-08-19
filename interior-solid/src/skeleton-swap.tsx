@@ -33,30 +33,30 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 	let skVisible = false
 	let skDelay = 0
 	let skMin = 0
-	createEffect(() => {
-		skReady = options.ready()
-		skVisible = visible()
-		skDelay = delay()
-		skMin = minVisible()
-	}, () => {
-		const ready = skReady
-		const isVisible = skVisible
-		const d = skDelay
-		const min = skMin
-		if (!ready) {
-			if (isVisible) return
-			const t = setTimeout(() => {
-				shownAt = performance.now()
-				onSettled(() => { setVisible(true) })
-			}, d)
-			return (() => clearTimeout(t))
-		}
+	createEffect(
+		() => {
+			skReady = options.ready()
+			skVisible = visible()
+			skDelay = delay()
+			skMin = minVisible()
+			return { ready: skReady, isVisible: skVisible, d: skDelay, min: skMin }
+		},
+		({ ready, isVisible, d, min }) => {
+			if (!ready) {
+				if (isVisible) return
+				const t = setTimeout(() => {
+					shownAt = performance.now()
+					onSettled(() => { setVisible(true) })
+				}, d)
+				return (() => clearTimeout(t))
+			}
 
-		if (!isVisible) return
-		const rest = Math.max(0, min - (performance.now() - shownAt))
-		const t = setTimeout(() => onSettled(() => { setVisible(false) }), rest)
-		return (() => clearTimeout(t))
-	})
+			if (!isVisible) return
+			const rest = Math.max(0, min - (performance.now() - shownAt))
+			const t = setTimeout(() => onSettled(() => { setVisible(false) }), rest)
+			return (() => clearTimeout(t))
+		},
+	)
 
 	return {showSkeleton: visible, busy: () => !options.ready()}
 }
