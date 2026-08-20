@@ -1,3 +1,4 @@
+import {createMemo} from "solid-js"
 import {Motion} from "solid-motionone"
 import {useId} from "./use-id.js"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
@@ -22,8 +23,8 @@ export function ProgressBar(props: ProgressBarProps) {
 	const labelId = useId()
 	const barRef: {current: HTMLElement | null} = {current: null}
 
-	const max = () => unwrap(props.max) ?? 100
-	const value = () => unwrap(props.value)
+	const max = createMemo(() => unwrap(props.max) ?? 100)
+	const value = createMemo(() => unwrap(props.value))
 	const indeterminate = () => value() === null
 	const fraction = () =>
 		indeterminate() || max() <= 0
@@ -69,7 +70,7 @@ export function ProgressBar(props: ProgressBarProps) {
 				role="progressbar"
 				aria-labelledby={labelId}
 				aria-valuemin={0}
-				aria-valuemax={unwrap(props.max) ?? 100}
+				aria-valuemax={max() ?? 100}
 				ref={(el: HTMLElement) => { barRef.current = el }}
 				{...measured()}
 				class="mt-2 rounded-[4px] bg-stone-200/60 p-[2px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.1),inset_0_0_0_1px_rgba(28,25,23,0.06)] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"

@@ -136,7 +136,7 @@ export function useModal({
 
 	const close = () => latestRef.current.onClose()
 
-	const openOn = () => unwrap(open as any) as boolean
+	const openOn = createMemo(() => unwrap(open as any) as boolean)
 
 	const resolveFlag = (v: boolean | (() => boolean | undefined) | undefined) =>
 		v === undefined ? true : typeof v === "function" ? !!(v as () => boolean | undefined)() : !!v

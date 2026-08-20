@@ -1,4 +1,4 @@
-import {createSignal, onSettled, For} from "solid-js";
+import {createMemo, createSignal, onSettled, For} from "solid-js";
 import {unwrap} from "./unwrap.js";
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js";
 import {effect} from "./effect.js";
@@ -37,8 +37,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
 	const buttons: (HTMLButtonElement | null)[] = [];
 
-	const controlled = () => unwrap(props.value) !== undefined;
-	const current = () => (controlled() ? (unwrap(props.value) as string) : internal());
+	const controlled = createMemo(() => unwrap(props.value) !== undefined);
+	const current = createMemo(() => (controlled() ? (unwrap(props.value) as string) : internal()));
 	const index = () => {
 		const found = props.options.findIndex((o) => o.value === current());
 		return found < 0 ? 0 : found;

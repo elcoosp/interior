@@ -79,8 +79,8 @@ export function useExpandingSearch({
 	const [ownOpen, setOwnOpen] = createSignal(defaultOpen)
 	const [focused, setFocused] = createSignal(false)
 
-	const query = () => unwrap(value) ?? ownValue()
-	const isOpen = () => unwrap(open) ?? ownOpen()
+	const query = createMemo(() => unwrap(value) ?? ownValue())
+	const isOpen = createMemo(() => unwrap(open) ?? ownOpen())
 
 	const inputRef: {current: HTMLInputElement | null} = {current: null}
 	const triggerRef: {current: HTMLButtonElement | null} = {current: null}

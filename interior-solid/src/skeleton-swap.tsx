@@ -81,8 +81,9 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 	const barHeightVal = props.barHeight ?? 9
 	const boxVal = props.reserve ?? linesVal * lineHeightVal
 
+	const ready = createMemo(() => unwrap(props.ready))
 	const {showSkeleton} = useSkeletonSwap({
-		ready: () => unwrap(props.ready),
+		ready,
 		delay: props.delay,
 		minVisible: props.minVisible,
 	})
@@ -138,7 +139,7 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 	return (
 		<div
 			ref={shell}
-			aria-busy={unwrap(props.ready) ? "false" : "true"}
+			aria-busy={ready() ? "false" : "true"}
 			aria-label={unwrap(props.label)}
 			style={{height: `${boxVal}px`}}
 			class={`relative grid overflow-y-auto overscroll-contain text-stone-700 dark:text-stone-200 ${props.class ?? ""}`}
