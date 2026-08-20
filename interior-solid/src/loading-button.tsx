@@ -1,4 +1,4 @@
-import {createEffect, createSignal, onCleanup} from "solid-js"
+import {createEffect, createMemo, createRoot, createSignal, getOwner, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
@@ -19,91 +19,100 @@ export function useAsyncAction({
 	resetAfter = 1400,
 	onError,
 }: UseAsyncActionOptions) {
-	const [status, setStatus] = createSignal<AsyncActionStatus>("idle")
+	// IMPORTANT (Solid 2.0 RC): a signal created during a component's render and
+	// updated later from an event handler must belong to an OWNER that stays
+	// alive. In this RC the component-render owner can be disposed by the time
+	// the handler fires, which makes the setter a silent no-op. Wrapping the
+	// hook in a persistent createRoot (disposed only on unmount) keeps the
+	// signal's owner alive for the component's whole lifetime.
+	let disposeRoot: (() => void) | undefined
+	void getOwner()
 
-	let phase: AsyncActionStatus = "idle"
-	let runId = 0
-	let timer: ReturnType<typeof setTimeout> | null = null
+	// `alive` lives in the hook's outer scope so onCleanup (outside the
+	// createRoot closure) can flip it on unmount.
 	let alive = true
 
-	const act = action
-	const fail = onError
+	const api = createRoot((dispose) => {
+		disposeRoot = dispose
+		const [status, setStatus] = createSignal<AsyncActionStatus>("idle")
 
-	const clear = () => {
-		if (timer) {
-			clearTimeout(timer)
-			timer = null
+		let phase: AsyncActionStatus = "idle"
+		let runId = 0
+		let timer: ReturnType<typeof setTimeout> | null = null
+
+		const act = action
+		const fail = onError
+
+		const clear = () => {
+			if (timer) {
+				clearTimeout(timer)
+				timer = null
+			}
 		}
-	}
 
-	const reset = () => {
-		runId += 1
-		clear()
-		phase = "idle"
-		setStatus("idle")
-	}
-
-	const run = () => {
-		if (phase === "pending") return
-
-		clear()
-		const id = ++runId
-		phase = "pending"
-		setStatus("pending")
-
-		const settle = (next: "success" | "error") => {
-			if (!alive || id !== runId) return
+		const reset = () => {
+			runId += 1
 			clear()
-			phase = next
-			setStatus(next)
-			timer = setTimeout(() => {
+			phase = "idle"
+			setStatus("idle")
+		}
+
+		const run = () => {
+			if (phase === "pending") return
+
+			clear()
+			const id = ++runId
+			phase = "pending"
+			setStatus("pending")
+
+			const settle = (next: "success" | "error") => {
 				if (!alive || id !== runId) return
-				phase = "idle"
-				setStatus("idle")
-			}, resetAfter)
+				clear()
+				phase = next
+				setStatus(next)
+				timer = setTimeout(() => {
+					if (!alive || id !== runId) return
+					phase = "idle"
+					setStatus("idle")
+				}, resetAfter)
+			}
+
+			Promise.resolve()
+				.then(() => act())
+				.then(
+					() => settle("success"),
+					(error: unknown) => {
+						fail?.(error)
+						settle("error")
+					},
+				)
 		}
 
-		Promise.resolve()
-			.then(() => act())
-			.then(
-				() => settle("success"),
-				(error: unknown) => {
-					fail?.(error)
-					settle("error")
-				},
-			)
-	}
-
-	createEffect(() => undefined, () => {
-		return () => {
-			alive = false
-			clear()
+		return {
+			status,
+			run,
+			reset,
+			pending: () => status() === "pending",
 		}
 	})
 
-	return {
-		status,
-		run,
-		reset,
-		pending: () => status() === "pending",
-	}
+	onCleanup(() => {
+		alive = false
+		disposeRoot?.()
+	})
+
+	return api
 }
 
 function Spinner(props: {still: boolean}) {
 	return (
-		<Motion.svg
+		<svg
 			width="12"
 			height="12"
 			viewBox="0 0 12 12"
 			fill="none"
 			aria-hidden="true"
-			class="shrink-0"
-			animate={props.still ? undefined : {rotate: 360}}
-			transition={
-				props.still
-					? undefined
-					: ({duration: 0.85, repeat: Infinity, ease: "linear"} as any)
-			}
+			class={`shrink-0${props.still ? "" : " animate-spin motion-reduce:animate-none"}`}
 		>
 			<circle
 				cx="6"
@@ -119,7 +128,7 @@ function Spinner(props: {still: boolean}) {
 				stroke-width="1.5"
 				stroke-linecap="round"
 			/>
-		</Motion.svg>
+		</svg>
 	)
 }
 
@@ -183,14 +192,19 @@ export function LoadingButton(props: LoadingButtonProps) {
 
 	const fade = () => (reduced() ? INSTANT : CROSSFADE)
 
+	// Snapshot the async status inside a memo (a tracked scope) so the
+	// `status()` reads feeding Motion's animate accessors don't trip
+	// STRICT_READ_UNTRACKED, and the crossfade updates reactively.
+	const statusState = createMemo(() => status())
+
 	const label = () =>
 		status() === "pending"
 			? (props.pendingLabel ?? props.children)
 			: status() === "success"
-				? (props.successLabel ?? "Done")
-				: status() === "error"
-					? (props.errorLabel ?? "Try again")
-					: props.children
+			? (props.successLabel ?? "Done")
+			: status() === "error"
+			? (props.errorLabel ?? "Try again")
+			: props.children
 
 	const faces = () => [
 		{key: "idle", text: props.children, tone: "text-stone-700 dark:text-stone-200", icon: null},
@@ -214,15 +228,28 @@ export function LoadingButton(props: LoadingButtonProps) {
 		},
 	]
 
+	// Each face's inner <span> visibility is toggled via this effect (not a JSX
+	// `class` attribute) so the `statusState()` read stays tracked and never
+	// becomes a reactive getter that devComponent enumerates in untrack.
+	const faceEls: Record<string, HTMLElement> = {}
+	createEffect(
+		() => ({s: statusState(), fs: faces()}),
+		({s, fs}) => {
+			for (const f of fs) {
+				const el = faceEls[f.key]
+				if (el) el.classList.toggle("opacity-0", s !== f.key)
+			}
+		},
+	)
+
 	return (
 		<>
 			<Motion.button
 				type="button"
 				disabled={props.disabled}
-				aria-label={label()}
-				aria-busy={pending() ? "true" : undefined}
-				aria-disabled={pending() ? "true" : undefined}
-				press={props.disabled || pending() || reduced() ? undefined : {y: 1}}
+				aria-label={label}
+				aria-busy={() => pending()}
+				aria-disabled={() => pending()}
 				transition={CELL as any}
 				onClick={(event: MouseEvent) => {
 					if (pending()) {
@@ -231,25 +258,36 @@ export function LoadingButton(props: LoadingButtonProps) {
 					}
 					run()
 				}}
-											class={`relative inline-flex min-h-9 select-none items-center justify-center rounded-[9px] border border-stone-200 bg-white px-3.5 text-[13px] font-medium text-stone-700 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(28,25,23,0.06),0_1px_2px_rgba(28,25,23,0.08)] outline-none transition-[border-color,background-color] duration-150 hover:bg-stone-50 focus-visible:border-[#4568FF] focus-visible:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_10px_20px_-14px_rgba(69,104,255,0.6)] disabled:opacity-50 dark:border-white/[0.16] dark:bg-[#252522] dark:text-stone-200 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_2px_rgba(0,0,0,0.4)] dark:hover:bg-[#2A2A27] dark:focus-visible:border-[#93B0FF] dark:focus-visible:shadow-[0_10px_20px_-14px_rgba(147,176,255,0.5)] ${props.class ?? ""}`}
+				class={`relative inline-flex min-h-9 select-none items-center justify-center rounded-[9px] border border-stone-200 bg-white px-3.5 text-[13px] font-medium text-stone-700 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(28,25,23,0.06),0_1px_2px_rgba(28,25,23,0.08)] outline-none transition-[border-color,background-color] duration-150 hover:bg-stone-50 focus-visible:border-[#4568FF] focus-visible:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_10px_20px_-14px_rgba(69,104,255,0.6)] disabled:opacity-50 dark:border-white/[0.16] dark:bg-[#252522] dark:text-stone-200 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_2px_rgba(0,0,0,0.4)] dark:hover:bg-[#2A2A27] dark:focus-visible:border-[#93B0FF] dark:focus-visible:shadow-[0_10px_20px_-14px_rgba(147,176,255,0.5)] ${props.class ?? ""}`}
 				style={"border-radius: 9px; touch-action: manipulation"}
 			>
 				<span aria-hidden="true" class="relative grid place-items-center">
-					{faces().map((face) => (
-						<Motion.span
-							initial={false}
-							animate={() =>
-								face.key === status()
-									? {opacity: 1, y: 0, filter: "blur(0px)"}
-									: {opacity: 0, y: 3, filter: "blur(3px)"}
-							}
-							transition={() => fade()}
-							class={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 whitespace-nowrap ${face.tone}`}
-						>
-							{face.icon}
-							{face.text}
-						</Motion.span>
-					))}
+					{faces().map((face: any) => {
+						const anim = createMemo(() => {
+							const active = statusState() === face.key
+							return active
+								? {opacity: 1, y: 0, filter: "blur(0px)"}
+								: {opacity: 0, y: 3, filter: "blur(3px)"}
+						})
+						// The fork drops `initial`, so inactive faces would mount at
+						// opacity:1 and stack (the red error face flashes on first
+						// render). Hide them via CSS so only the active face shows
+						// before/without Motion applying its animate target.
+						const active = () => statusState() === face.key
+						return (
+							<Motion.span
+								initial={() => anim()}
+								animate={() => anim()}
+								transition={fade}
+								class={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 whitespace-nowrap ${face.tone}`}
+							>
+								<span ref={(el: HTMLElement) => { if (el) faceEls[face.key] = el }}>
+									{face.icon}
+									{face.text}
+								</span>
+							</Motion.span>
+						)
+					})}
 				</span>
 			</Motion.button>
 
@@ -257,8 +295,8 @@ export function LoadingButton(props: LoadingButtonProps) {
 				{status() === "success"
 					? (props.successLabel ?? "Done")
 					: status() === "error"
-						? (props.errorLabel ?? "Try again")
-						: ""}
+					? (props.errorLabel ?? "Try again")
+					: ""}
 			</span>
 		</>
 	)

@@ -1,6 +1,7 @@
 import {createEffect, createMemo, createSignal, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
+import {effect} from "./effect.js"
 
 const PRESS = {type: "spring", stiffness: 520, damping: 34, mass: 0.45} as const
 
@@ -52,11 +53,14 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		setDown(false)
 	}
 
-	let pdTracking = false
-	createEffect(() => { pdTracking = tracking() }, () => {
-		if (!pdTracking) return
+	// Mirrors React's useEffect(fn, [tracking]) — (re)bind window listeners
+	// whenever `tracking` flips, cleaning up the previous binding.
+	effect(
+		() => tracking(),
+		(isTracking) => {
+			if (!isTracking) return
 
-		const contains = (event: PointerEvent) => {
+			const contains = (event: PointerEvent) => {
 			const el = nodeEl
 			if (!el) return false
 			const r = el.getBoundingClientRect()
@@ -87,7 +91,7 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		window.addEventListener("blur", bail)
 		document.addEventListener("visibilitychange", hidden)
 
-		return (() => {
+		onCleanup(() => {
 			window.removeEventListener("pointermove", move)
 			window.removeEventListener("pointerup", lift)
 			window.removeEventListener("pointercancel", lift)
@@ -96,10 +100,12 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		})
 	})
 
-	let pdDisabled = false
-	createEffect(() => { pdDisabled = disabled() }, () => {
-		if (pdDisabled) stop()
-	})
+	effect(
+		() => disabled(),
+		(d) => {
+			if (d) stop()
+		},
+	)
 
 	const ref = (next: HTMLElement | null) => {
 		nodeEl = next ?? undefined
@@ -109,7 +115,10 @@ export function usePressDepth(options: UsePressDepthOptions = {}): UsePressDepth
 		onPointerDown: (event: PointerEvent) => {
 			if (disabled()) return
 			if (event.pointerType === "mouse" && event.button !== 0) return
-			const r = (event.currentTarget as HTMLElement).getBoundingClientRect()
+			// NOTE: Solid's delegated events reset event.currentTarget to null
+			// after dispatch, so always measure against the captured node ref.
+			const el = nodeEl
+			const r = el ? el.getBoundingClientRect() : (event.currentTarget as HTMLElement).getBoundingClientRect()
 			setOrigin({
 				x: Math.max(-1, Math.min(1, ((event.clientX - r.left) / r.width) * 2 - 1)),
 				y: Math.max(-1, Math.min(1, ((event.clientY - r.top) / r.height) * 2 - 1)),
@@ -150,59 +159,72 @@ export function PressDepth(props: PressDepthProps) {
 	const reduced = usePrefersReducedMotion()
 	const {pressed, origin, ref, bind} = usePressDepth({disabled: props.disabled})
 
-	const lean = () => (pressed() && origin() && !reduced() ? origin() : null)
-
-	// Motion configs are read by solid-motionone in an UNTRACKED scope during
-	// initial render, so reading live signals (`pressed`/`origin`) there trips
-	// STRICT_READ_UNTRACKED. Snapshot them into a plain config via a memo
-	// (a tracked scope, so the signal reads inside are allowed) and feed the
-	// resolved values to Motion — never the live signals.
+	// Reactive motion config. `initial`/`animate`/`transition` are passed the
+	// memo ACCESSOR (not a called value) so solid-motionone re-invokes them on
+	// change, and the signal reads inside the memo stay in a tracked scope
+	// (no STRICT_READ_UNTRACKED in Solid 2.0 RC).
+	const REST = {y: 0, rotateX: 0, rotateY: 0, transformPerspective: 340, overlayOpacity: 1}
 	const pressCfg = createMemo(() => {
 		const isPressed = pressed()
-		const o = lean()
-		const isReduced = reduced()
+		const o = isPressed && origin() && !reduced() ? origin() : null
 		return {
 			y: isPressed ? depth() : 0,
 			rotateX: o ? -o.y * tilt() : 0,
 			rotateY: o ? o.x * tilt() : 0,
+			transformPerspective: 340,
 			overlayOpacity: isPressed ? 0 : 1,
-			transition: isReduced ? { duration: 0 } : PRESS,
+			transition: reduced() ? {duration: 0} : (PRESS as any),
 		}
 	})
+	const overlayAnim = createMemo(() => ({opacity: pressCfg().overlayOpacity, transition: pressCfg().transition}))
+
+	const btnRef: {current: HTMLButtonElement | null} = {current: null}
+	const overlayRef: {current: HTMLSpanElement | null} = {current: null}
+	// Apply the depth-dependent `style` via an effect (not a JSX attribute) so
+	// the signal read stays in a tracked scope and never becomes a reactive
+	// getter that devComponent enumerates in untrack (no STRICT_READ_UNTRACKED).
+	createEffect(
+		() => depth(),
+		(d) => {
+			if (btnRef.current) {
+				btnRef.current.style.paddingBottom = `${d}`
+				btnRef.current.style.touchAction = "manipulation"
+				btnRef.current.style.setProperty("-webkit-tap-highlight-color", "transparent")
+			}
+			if (overlayRef.current) overlayRef.current.style.top = `${d}px`
+		},
+	)
 
 	return (
 		<button
-			ref={ref}
+			ref={(el: HTMLButtonElement) => {
+				btnRef.current = el
+				ref(el)
+			}}
 			type={props.type ?? "button"}
 			disabled={props.disabled}
 			aria-label={props["aria-label"]}
-			data-pressed={pressed() ? "" : undefined}
+			data-pressed={() => pressed() ? "" : undefined}
 			onClick={props.onClick}
-			style={`padding-bottom: ${depth()}; touch-action: manipulation; -webkit-tap-highlight-color: transparent`}
 			class={`group relative inline-flex select-none rounded-[9px] align-middle outline-none disabled:opacity-50 ${props.class ?? ""}`}
 			{...bind}
 		>
 			<span
+				ref={(el: HTMLSpanElement) => { overlayRef.current = el }}
 				aria-hidden="true"
-				style={{ top: `${depth()}px` }}
 				class="absolute inset-x-0 bottom-0 rounded-[9px] bg-stone-300 dark:bg-white/25"
 			/>
 			<Motion.span
-				initial={false}
-				animate={{
-					y: () => pressCfg().y,
-					rotateX: () => pressCfg().rotateX,
-					rotateY: () => pressCfg().rotateY,
-				} as any}
-				transition={() => pressCfg().transition}
-				style={"transform-perspective: 340px"}
+				initial={REST}
+				animate={() => pressCfg()}
+				transition={() => pressCfg()}
 				class={`relative inline-flex h-9 items-center justify-center gap-2 rounded-[9px] border border-stone-200 bg-white px-3.5 text-[13px] font-medium text-stone-700 group-focus-visible:ring-2 group-focus-visible:ring-stone-400 dark:border-white/[0.16] dark:bg-[#1D1D1A] dark:text-stone-200 dark:group-focus-visible:ring-stone-500 ${props.class ?? ""}`}
 			>
 				<Motion.span
 					aria-hidden="true"
-					initial={false}
-					animate={() => ({ opacity: pressCfg().overlayOpacity }) as any}
-					transition={() => pressCfg().transition}
+					initial={{opacity: 1}}
+					animate={() => overlayAnim()}
+					transition={() => pressCfg()}
 					class="pointer-events-none absolute inset-0 rounded-[9px] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(28,25,23,0.06)] dark:shadow-[inset_0_1.5px_0_rgba(255,255,255,0.09)]"
 				/>
 				{props.children}

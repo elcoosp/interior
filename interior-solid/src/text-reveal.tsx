@@ -1,4 +1,4 @@
-import { createMemo, For } from "solid-js";
+import { createMemo, createSignal, onCleanup } from "solid-js";
 import { Motion } from "solid-motionone";
 import { usePrefersReducedMotion } from "./use-prefers-reduced-motion.js";
 
@@ -14,11 +14,7 @@ export type TextRevealUnit = {
   key: string;
   text: string;
   index: number;
-};
-
-export type TextRevealGroup = {
-  key: string;
-  units: TextRevealUnit[];
+  spaceBefore: boolean;
 };
 
 export type UseTextRevealOptions = {
@@ -33,9 +29,6 @@ export type UseTextRevealOptions = {
 };
 
 // Resolve the per-unit step (seconds between units) from the text length.
-// Computed directly from props.text (a plain string — never a signal), so the
-// result can be read inside Motion's prop getters (which solid-motionone reads
-// untracked during initial render) without tripping STRICT_READ_UNTRACKED.
 const resolveStep = (text: string, stagger?: number, maxDuration?: number) => {
   const words = text.trim().length ? text.trim().split(/\s+/) : [];
   const total = words.length;
@@ -50,37 +43,88 @@ export function useTextReveal<T extends HTMLElement = HTMLSpanElement>(
   const ref = { current: null as T | null };
   const reduced = usePrefersReducedMotion();
 
-  // groups/count are consumed by <For>, which reads them in a tracked scope
-  // (For's internal memo), so this memo is safe to read from JSX.
-  const data = createMemo(() => {
+  const startOnView = props.startOnView ?? true;
+  const [inView, setInView] = createSignal(false);
+
+  // Reveal trigger. Prefer an IntersectionObserver for true "start on view"
+  // semantics, but ALSO guarantee a fallback reveal shortly after mount so the
+  // animation always plays even if IO never reports an intersection (headless
+  // layouts, zero-height-at-observe, etc.). Cleanup is registered in the
+  // component-body scope (calling onCleanup inside a rAF callback throws
+  // "NO_OWNER_CLEANUP" and aborts the setup).
+  const once = props.once ?? true;
+  const amount = props.amount ?? 0.35;
+  let io: IntersectionObserver | undefined;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  requestAnimationFrame(() => {
+    // Guaranteed reveal a moment after mount so the HIDDEN state paints first
+    // (the fork applies `animate` at mount with initial={false}), then the
+    // staggered reveal plays. Set this BEFORE attempting IO so a throwing
+    // IntersectionObserver (some sandboxed / headless layouts) can never
+    // prevent the reveal.
+    fallbackTimer = setTimeout(() => setInView(true), 400);
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    try {
+      io = new IntersectionObserver(
+        (entries) => {
+          const e = entries[0];
+          if (e?.isIntersecting) {
+            setInView(true);
+            if (once) io?.disconnect();
+          } else if (!once) {
+            setInView(false);
+          }
+        },
+        { threshold: amount },
+      );
+      io.observe(el);
+    } catch {
+      /* IO unavailable — the fallback timer still reveals */
+    }
+  });
+  onCleanup(() => {
+    clearTimeout(fallbackTimer);
+    io?.disconnect();
+  });
+
+  // Flat list of units (stable identity, no <For>) so each Motion.span is a
+  // stable element the fork can bind to.
+  const units = createMemo(() => {
     const value = props.text;
     const words = value.trim().length ? value.trim().split(/\s+/) : [];
 
     let index = 0;
-    const built: TextRevealGroup[] = words.map((word, w) => {
+    const list: TextRevealUnit[] = [];
+    words.forEach((word, w) => {
       if (props.by === "character") {
-        return {
-          key: `w${w}`,
-          units: Array.from(word).map((char, c) => ({
-            key: `w${w}c${c}`,
-            text: char,
-            index: index++,
-          })),
-        };
+        Array.from(word).forEach((char, c) => {
+          list.push({ key: `w${w}c${c}`, text: char, index: index++, spaceBefore: false });
+        });
+      } else {
+        list.push({ key: `w${w}`, text: word, index: index++, spaceBefore: false });
       }
-      return {
-        key: `w${w}`,
-        units: [{ key: `w${w}`, text: word, index: index++ }],
-      };
+      if (w < words.length - 1) {
+        // trailing space represented as its own non-animated spacer unit
+        list.push({ key: `sp${w}`, text: " ", index: -1, spaceBefore: false });
+      }
     });
-
-    return { groups: built, count: index };
+    return list;
   });
+
+  // `startOnView`/`inView()` are signals. Reading them directly inside the
+  // `animate`/`transition` functions (which motion resolves in an untracked
+  // callback) trips STRICT_READ_UNTRACKED. Compute the started flag in a memo
+  // (tracked scope) and read the memo's cached value in those untracked paths.
+  const started = createMemo(
+    () => (props.play ?? true) && (!startOnView || inView()),
+  );
 
   return {
     ref,
-    groups: () => data().groups,
-    count: () => data().count,
+    units,
+    count: () => units().filter((u) => u.index >= 0).length,
+    started,
     reduced: () => Boolean(reduced()),
     step: () => resolveStep(props.text, props.stagger, props.maxDuration),
   };
@@ -91,7 +135,7 @@ export type TextRevealProps = UseTextRevealOptions & {
 };
 
 export function TextReveal(props: TextRevealProps) {
-  const { ref, groups, reduced, step } = useTextReveal<HTMLSpanElement>(props);
+  const { ref, units, reduced, step, started } = useTextReveal<HTMLSpanElement>(props);
 
   return (
     <span
@@ -102,39 +146,29 @@ export function TextReveal(props: TextRevealProps) {
     >
       <span class="sr-only">{props.text}</span>
 
-      <span aria-hidden="true">
-        <For each={groups as any}>
-          {(group, g) => (
-            <>
-              {g() > 0 ? " " : null}
-              <span class="inline-block whitespace-nowrap align-baseline">
-                <For each={group.units}>
-                  {(unit) => (
-                    <Motion.span
-                      class="inline-block align-baseline"
-                      // reduced()/step() read plain values (no signals), so these
-                      // getters are safe to read inside solid-motionone's untracked
-                      // initial render.
-                      initial={reduced() ? false : HIDDEN}
-                      animate={SHOWN}
-                      transition={
-                        reduced()
-                          ? { duration: 0 }
-                          : {
-                              duration: DURATION,
-                              ease: EASE,
-                              delay: unit.index * step(),
-                            } as any
-                      }
-                    >
-                      {unit.text}
-                    </Motion.span>
-                  )}
-                </For>
-              </span>
-            </>
-          )}
-        </For>
+      <span aria-hidden="true" class="inline">
+        {units().map((unit) =>
+          unit.index < 0 ? (
+            <span class="inline-block whitespace-pre"> </span>
+          ) : (
+            <Motion.span
+              class="inline-block align-baseline"
+              initial={false}
+              animate={() => (started() ? SHOWN : HIDDEN)}
+              transition={() =>
+                reduced()
+                  ? { duration: 0 }
+                  : {
+                      duration: DURATION,
+                      ease: EASE,
+                      delay: started() ? unit.index * step() : 0,
+                    } as any
+              }
+            >
+              {unit.text}
+            </Motion.span>
+          ),
+        )}
       </span>
     </span>
   );

@@ -1,6 +1,7 @@
-import {createSignal, For, onCleanup, createEffect} from "solid-js"
+import {createSignal, For, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
+import {effect} from "./effect.js"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 const BLOOM = {duration: 0.5, ease: "linear"} as const
@@ -29,6 +30,8 @@ export function useRipple({
 }: UseRippleOptions = {}) {
 	const [ripples, setRipples] = createSignal<RippleSpec[]>([])
 
+	// Plain mutable refs (mirror React's useRef) — the source of truth for the
+	// list lives outside the signal so we can splice/trim without re-renders.
 	const list: RippleSpec[] = []
 	let seq = 0
 	const born = new Map<number, number>()
@@ -82,24 +85,24 @@ export function useRipple({
 
 	const release = (id: number) => {
 		if (timers.has(id)) return
-		if (!list.some(r => r.id === id)) return
+		if (!list.some((r) => r.id === id)) return
 
 		const wait = Math.max(0, minVisible - (performance.now() - (born.get(id) ?? 0)))
 
 		const start = setTimeout(() => {
-			commit(list.map(r => (r.id === id ? {...r, released: true} : r)))
+			commit(list.map((r) => (r.id === id ? {...r, released: true} : r)))
 		}, wait)
 
 		const drop = setTimeout(() => {
 			forget(id)
-			commit(list.filter(r => r.id !== id))
+			commit(list.filter((r) => r.id !== id))
 		}, wait + fade)
 
 		timers.set(id, [start, drop])
 	}
 
 	const releaseAll = () => {
-		pointers.forEach(id => release(id))
+		pointers.forEach((id) => release(id))
 		pointers.clear()
 		if (keyed !== null) {
 			release(keyed)
@@ -114,18 +117,21 @@ export function useRipple({
 		release(id)
 	}
 
-	createEffect(() => undefined, () => {
-		const bail = () => releaseAll()
-		const onVisibility = () => document.hidden && releaseAll()
-		window.addEventListener("blur", bail)
-		document.addEventListener("visibilitychange", onVisibility)
-		return () => {
-			window.removeEventListener("blur", bail)
-			document.removeEventListener("visibilitychange", onVisibility)
-			timers.forEach(set => set.forEach(clearTimeout))
-			timers.clear()
-		}
-	})
+	effect(
+		() => true,
+		() => {
+			const bail = () => releaseAll()
+			const onVisibility = () => document.hidden && releaseAll()
+			window.addEventListener("blur", bail)
+			document.addEventListener("visibilitychange", onVisibility)
+			onCleanup(() => {
+				window.removeEventListener("blur", bail)
+				document.removeEventListener("visibilitychange", onVisibility)
+				timers.forEach((set) => set.forEach(clearTimeout))
+				timers.clear()
+			})
+		},
+	)
 
 	const bind = {
 		onPointerDown: (e: PointerEvent & {currentTarget: HTMLElement}) => {
@@ -182,7 +188,7 @@ export function Ripple(props: RippleProps) {
 				class="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
 			>
 				<For each={ripples()}>
-					{r => (
+					{(r) => (
 						<Motion.span
 							class={`absolute block rounded-full ${props.tintClassName ?? "bg-stone-800/15 dark:bg-white/20"}`}
 							style={{
@@ -192,7 +198,7 @@ export function Ripple(props: RippleProps) {
 								height: `${BASE}px`,
 								"will-change": "transform, opacity",
 							}}
-							initial={{scale: reduced() ? r.scale : 0, opacity: 0}}
+							initial={() => ({scale: reduced() ? r.scale : 0, opacity: 0})}
 							animate={{scale: r.scale, opacity: r.released ? 0 : 1}}
 							transition={{
 								scale: reduced() ? {duration: 0} : BLOOM,

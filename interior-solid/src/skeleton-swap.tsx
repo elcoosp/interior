@@ -1,5 +1,7 @@
-import {createEffect, createSignal, For, onCleanup, onSettled, Show} from "solid-js"
+import {createEffect, createMemo, createSignal, For, onCleanup, Show} from "solid-js"
 import {Motion} from "solid-motionone"
+import {effect} from "./effect.js"
+import {unwrap} from "./unwrap.js"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 
 const CROSSFADE = {
@@ -33,28 +35,23 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 	let skVisible = false
 	let skDelay = 0
 	let skMin = 0
-	createEffect(
-		() => {
-			skReady = options.ready()
-			skVisible = visible()
-			skDelay = delay()
-			skMin = minVisible()
-			return { ready: skReady, isVisible: skVisible, d: skDelay, min: skMin }
-		},
+	effect(
+		() => ({ ready: options.ready(), isVisible: visible(), d: delay(), min: minVisible() }),
 		({ ready, isVisible, d, min }) => {
 			if (!ready) {
 				if (isVisible) return
 				const t = setTimeout(() => {
 					shownAt = performance.now()
-					onSettled(() => { setVisible(true) })
+					setVisible(true)
 				}, d)
-				return (() => clearTimeout(t))
+				onCleanup(() => clearTimeout(t))
+				return
 			}
 
 			if (!isVisible) return
 			const rest = Math.max(0, min - (performance.now() - shownAt))
-			const t = setTimeout(() => onSettled(() => { setVisible(false) }), rest)
-			return (() => clearTimeout(t))
+			const t = setTimeout(() => { setVisible(false) }, rest)
+			onCleanup(() => clearTimeout(t))
 		},
 	)
 
@@ -62,7 +59,7 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 }
 
 export type SkeletonSwapProps = {
-	ready: boolean
+	ready: boolean | (() => boolean)
 	children?: any
 	lines?: number
 	lineHeight?: number
@@ -70,70 +67,90 @@ export type SkeletonSwapProps = {
 	reserve?: number
 	delay?: number
 	minVisible?: number
-	label?: string
+	label?: string | (() => string)
 	skeleton?: any
 	class?: string
 }
 
 export function SkeletonSwap(props: SkeletonSwapProps) {
-	const lines = () => props.lines ?? 3
-	const lineHeight = () => props.lineHeight ?? 21
-	const barHeight = () => props.barHeight ?? 9
+	// Static layout values — read props once (they don't change reactively
+	// here) so the `style` attributes below never build reactive getters that
+	// devComponent enumerates in untrack (no STRICT_READ_UNTRACKED).
+	const linesVal = props.lines ?? 3
+	const lineHeightVal = props.lineHeight ?? 21
+	const barHeightVal = props.barHeight ?? 9
+	const boxVal = props.reserve ?? linesVal * lineHeightVal
 
 	const {showSkeleton} = useSkeletonSwap({
-		ready: () => props.ready,
+		ready: () => unwrap(props.ready),
 		delay: props.delay,
 		minVisible: props.minVisible,
 	})
 	const reduced = usePrefersReducedMotion()
 
+	// Reactive motion config so solid-motionone re-invokes `animate` on change
+	// (the previous plain object froze at mount, leaving the body visible
+	// behind the skeleton). Signal reads stay in a tracked scope → no
+	// STRICT_READ_UNTRACKED.
+	const bodyAnim = createMemo(() =>
+		reduced()
+			? {opacity: showSkeleton() ? 0 : 1}
+			: {
+					opacity: showSkeleton() ? 0 : 1,
+					scale: showSkeleton() ? 0.99 : 1,
+					filter: showSkeleton() ? "blur(4px)" : "blur(0px)",
+				},
+	)
+	const bodyTrans = () => (reduced() ? {duration: 0} : CROSSFADE)
+	const skelAnim = createMemo(() => ({opacity: 1}))
+	const skelTrans = () => (reduced() ? {duration: 0} : CROSSFADE)
+
 	let shell: HTMLDivElement | undefined
 	let body: HTMLDivElement | undefined
 	const [scrollable, setScrollable] = createSignal(false)
+	// `tabindex` depends on `scrollable()`; set it via an effect (not a JSX
+	// attribute) so the signal read stays tracked and never becomes a reactive
+	// getter that devComponent enumerates in untrack (no STRICT_READ_UNTRACKED).
+	createEffect(
+		() => scrollable(),
+		(sc) => {
+			if (shell) shell.tabIndex = sc ? 0 : -1
+		},
+	)
 
-	const box = () => props.reserve ?? lines() * lineHeight()
+	effect(
+		() => true,
+		() => {
+			const el = shell
+			const inner = body
+			if (!el || typeof ResizeObserver === "undefined") return
 
-	createEffect(() => undefined, () => {
-		const el = shell
-		const inner = body
-		if (!el || typeof ResizeObserver === "undefined") return
+			const check = () => setScrollable(el.scrollHeight - el.clientHeight > 1)
+			check()
 
-		const check = () => onSettled(() => { setScrollable(el.scrollHeight - el.clientHeight > 1) })
-		check()
-
-		const ro = new ResizeObserver(check)
-		ro.observe(el)
-		if (inner) ro.observe(inner)
-		return () => ro.disconnect()
-	})
+			const ro = new ResizeObserver(check)
+			ro.observe(el)
+			if (inner) ro.observe(inner)
+			return () => ro.disconnect()
+		},
+	)
 
 	return (
 		<div
 			ref={shell}
-			aria-busy={props.ready ? "false" : "true"}
-			aria-label={props.label}
-			tabindex={scrollable() ? 0 : undefined}
-			style={{height: `${box()}px`}}
+			aria-busy={unwrap(props.ready) ? "false" : "true"}
+			aria-label={unwrap(props.label)}
+			style={{height: `${boxVal}px`}}
 			class={`relative grid overflow-y-auto overscroll-contain text-stone-700 dark:text-stone-200 ${props.class ?? ""}`}
 		>
 			<Motion.div
 				ref={body}
 				class="col-start-1 row-start-1 min-w-0"
 				initial={false}
-				animate={
-					reduced()
-						? {opacity: showSkeleton() ? 0 : 1}
-						: {
-								opacity: showSkeleton() ? 0 : 1,
-								scale: showSkeleton() ? 0.99 : 1,
-								filter: showSkeleton() ? "blur(4px)" : "blur(0px)",
-							}
-				}
-				transition={(reduced() ? {duration: 0} : CROSSFADE) as any}
-				style={{
-					"transform-origin": "top left",
-					"pointer-events": showSkeleton() ? "none" : undefined,
-				}}
+				animate={() => bodyAnim()}
+				transition={bodyTrans}
+				style={{"transform-origin": "top left"}}
+				{...{"pointer-events": () => showSkeleton() ? "none" : undefined}}
 			>
 				{props.children}
 			</Motion.div>
@@ -142,26 +159,26 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 				<Motion.div
 					aria-hidden="true"
 					class="pointer-events-none col-start-1 row-start-1 w-full self-start"
-					initial={reduced() ? {opacity: 1} : {opacity: 0}}
-					animate={{opacity: 1}}
-					transition={(reduced() ? {duration: 0} : CROSSFADE) as any}
+					initial={() => (reduced() ? {opacity: 1} : {opacity: 0})}
+					animate={() => skelAnim()}
+					transition={skelTrans}
 				>
 					<Show
 						when={props.skeleton === undefined}
 						fallback={props.skeleton}
 					>
 						<div class="w-full">
-							<For each={Array.from({length: lines()}, (_, i) => i)}>
+							<For each={Array.from({length: linesVal}, (_, i) => i)}>
 								{i => (
 									<div
 										class="flex items-center"
-										style={{height: `${lineHeight()}px`}}
+										style={{height: `${lineHeightVal}px`}}
 									>
 										<div
 											class="rounded-[5px] bg-stone-200 dark:bg-white/15"
 											style={{
-												height: `${barHeight()}px`,
-												width: `${widthFor(i, lines())}%`,
+												height: `${barHeightVal}px`,
+												width: `${widthFor(i, linesVal)}%`,
 											}}
 										/>
 									</div>
@@ -174,7 +191,7 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 
 			<Show when={props.label}>
 				<span role="status" class="sr-only">
-					{props.ready ? `${props.label} loaded` : ""}
+					{unwrap(props.ready) ? `${unwrap(props.label)} loaded` : ""}
 				</span>
 			</Show>
 		</div>

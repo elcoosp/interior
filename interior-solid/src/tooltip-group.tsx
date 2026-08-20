@@ -4,14 +4,13 @@ import {
 	createMemo,
 	createSignal,
 	onCleanup,
-	onSettled,
 	Show,
 	useContext,
 } from "solid-js"
-import {Dynamic} from "@solidjs/web"
 import {Motion} from "solid-motionone"
 import {useId} from "./use-id.js"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
+import {effect} from "./effect.js"
 
 const RISE = {type: "spring", stiffness: 560, damping: 34, mass: 0.6} as const
 
@@ -195,19 +194,22 @@ export function createTooltipStore(getTiming: () => TooltipTiming): TooltipStore
 const TooltipGroupContext = createContext<TooltipStore | null>(null)
 
 function useDismissOnBlur(store: TooltipStore, enabled: boolean) {
-	createEffect(() => enabled, () => {
-		if (!enabled) return
-		const bail = () => store.reset()
-		const onVisibility = () => {
-			if (document.hidden) store.reset()
-		}
-		window.addEventListener("blur", bail)
-		document.addEventListener("visibilitychange", onVisibility)
-		return () => {
-			window.removeEventListener("blur", bail)
-			document.removeEventListener("visibilitychange", onVisibility)
-		}
-	})
+	effect(
+		() => enabled,
+		(en) => {
+			if (!en) return
+			const bail = () => store.reset()
+			const onVisibility = () => {
+				if (document.hidden) store.reset()
+			}
+			window.addEventListener("blur", bail)
+			document.addEventListener("visibilitychange", onVisibility)
+			return () => {
+				window.removeEventListener("blur", bail)
+				document.removeEventListener("visibilitychange", onVisibility)
+			}
+		},
+	)
 }
 
 export type TooltipGroupProps = {
@@ -230,19 +232,21 @@ export function TooltipGroup(props: TooltipGroupProps) {
 
 	const [warm, setWarm] = createSignal(false)
 
-	createEffect(
+	effect(
 		() => true,
 		() => {
-			const unsubscribe = store.subscribe(() => { onSettled(() => { setWarm(store.getWarm()); }); })
-			onSettled(() => { setWarm(store.getWarm()); })
+			const unsubscribe = store.subscribe(() => setWarm(store.getWarm()))
+			setWarm(store.getWarm())
 			return () => unsubscribe()
 		},
 	)
 
-	let ttWarm = false
-	createEffect(() => { ttWarm = warm() }, () => {
-		props.onWarmChange?.(ttWarm)
-	})
+	effect(
+		() => warm(),
+		(w) => {
+			props.onWarmChange?.(w)
+		},
+	)
 
 	onCleanup(() => store.dispose())
 	useDismissOnBlur(store, true)
@@ -327,14 +331,14 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 		}
 
 				let unsubscribe: (() => void) | undefined
-				createEffect(
+				effect(
 					() => tooltipId,
-					() => {
-						unsubscribe = store.subscribe(() => onSettled(sync))
-						onSettled(sync)
+					(id) => {
+						unsubscribe = store.subscribe(() => sync())
+						sync()
 						return () => {
 							unsubscribe?.()
-							store.close(tooltipId, true)
+							store.close(id, true)
 							solo?.dispose()
 						}
 					},
@@ -343,10 +347,14 @@ export function useTooltip(options: UseTooltipOptions = {}): UseTooltipReturn {
 	useDismissOnBlur(store, group === null)
 
 	let ttDisabled = false
-	createEffect(() => { ttDisabled = disabled() }, () => {
-		if (!ttDisabled) return
-		store.close(tooltipId, true)
-	})
+	effect(
+		() => disabled(),
+		(d) => {
+			ttDisabled = d
+			if (!d) return
+			store.close(tooltipId, true)
+		},
+	)
 
 	const triggerProps: TooltipTriggerProps = {
 		onPointerEnter: event => {
@@ -422,6 +430,7 @@ export function Tooltip(props: TooltipProps) {
 				? WARM
 				: RISE
 		const bubbleTransition = isReduced ? { duration: 0 } : SWAP
+		const lift = () => (side() === "top" ? 7 : -7)
 		const surfaceInitial = isReduced
 			? false
 			: isSkipped
@@ -445,35 +454,58 @@ export function Tooltip(props: TooltipProps) {
 		return parts.length > 0 ? parts.join(" ") : undefined
 	}
 
-	const lift = () => (side() === "top" ? 7 : -7)
+	const surfaceRef: {current: HTMLElement | null} = {current: null}
+	const tipRef: {current: HTMLElement | null} = {current: null}
+	// `transform-origin` (and the tooltip arrow's position + aria-hidden) depend
+	// on `side()`/`open()`; apply via effects (not JSX attributes) so the signal
+	// reads stay tracked and never become reactive getters that devComponent
+	// enumerates in untrack (no STRICT_READ_UNTRACKED).
+	createEffect(
+		() => side(),
+		(s) => {
+			if (surfaceRef.current) {
+				surfaceRef.current.style.transformOrigin = s === "top" ? "50% 100%" : "50% 0%"
+			}
+		},
+	)
+	createEffect(
+		() => ({s: side(), o: open()}),
+		({s, o}) => {
+			if (tipRef.current) {
+				tipRef.current.setAttribute("aria-hidden", o ? "false" : "true")
+				tipRef.current.style.bottom = s === "top" ? "calc(100% + 7px)" : ""
+				tipRef.current.style.top = s === "top" ? "" : "calc(100% + 7px)"
+			}
+		},
+	)
 
 	return (
 		<span class={`relative inline-flex ${props.class ?? ""}`}>
-			<Dynamic
-				component={props.children}
-				aria-describedby={described()}
-				{...triggerProps}
-			/>
+			<span
+				class="inline-flex"
+				onPointerEnter={triggerProps.onPointerEnter}
+				onPointerLeave={triggerProps.onPointerLeave}
+				onPointerDown={triggerProps.onPointerDown}
+				onPointerCancel={triggerProps.onPointerCancel}
+				onFocusIn={triggerProps.onFocus}
+				onFocusOut={triggerProps.onBlur}
+				onKeyDown={triggerProps.onKeyDown}
+			>
+				{props.children}
+			</span>
 
 			<span
-				aria-hidden={open() ? "false" : "true"}
+				ref={(el: HTMLElement) => { tipRef.current = el }}
 				class="pointer-events-none absolute left-1/2 z-50 flex w-0 justify-center"
-				style={
-					side() === "top"
-						? { bottom: "calc(100% + 7px)" }
-						: { top: "calc(100% + 7px)" }
-				}
 			>
 				<Show when={open()}>
 					<Motion.span
+						ref={(el: HTMLElement) => { surfaceRef.current = el }}
 						role="tooltip"
 						id={tooltipId}
 						initial={() => cfg().surfaceInitial as any}
-						animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+						animate={{opacity: 1, scale: 1, y: 0, filter: "blur(0px)"}}
 						transition={() => cfg().enterTransition}
-						style={{
-							"transform-origin": side() === "top" ? "50% 100%" : "50% 0%",
-						}}
 						class={`relative w-max max-w-[220px] shrink-0 overflow-hidden rounded-[8px] px-2 py-1 text-[11.5px] font-medium leading-snug text-stone-700 dark:text-stone-100 ${props.contentClass ?? ""}`}
 					>
 						<span
@@ -482,7 +514,7 @@ export function Tooltip(props: TooltipProps) {
 						/>
 						<Motion.span
 							initial={() => cfg().bubbleInitial as any}
-							animate={{ opacity: 1, x: 0, y: 0 }}
+							animate={{opacity: 1, x: 0, y: 0}}
 							transition={() => cfg().bubbleTransition}
 							class="relative block whitespace-nowrap"
 						>

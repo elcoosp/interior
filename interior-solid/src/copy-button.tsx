@@ -1,6 +1,7 @@
-import {createEffect, createRenderEffect, createSignal, onCleanup, onSettled} from "solid-js"
+import {createSignal, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
+import {effect} from "./effect.js"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 const CELL = {type: "spring", stiffness: 520, damping: 34, mass: 0.45} as const
@@ -58,11 +59,20 @@ export function useCopyToClipboard({
 	const copied = onCopy
 	const failed = onError
 
-	createEffect(() => undefined, () => {
-		return () => {
-			mounted = false
-		}
+	onCleanup(() => {
+		mounted = false
 	})
+
+	// Mirrors React's useEffect(fn, [ticket, status, timeout]) — reset to idle
+	// after `timeout` once a copy/error has been shown.
+	effect(
+		() => ({ t: ticket(), s: status(), to: timeout }),
+		({ t, s, to }) => {
+			if (t === 0 || s === "idle") return
+			const id = setTimeout(() => setStatus("idle"), to)
+			return () => clearTimeout(id)
+		},
+	)
 
 	const reset = () => {
 		setStatus("idle")
@@ -101,25 +111,6 @@ export function useCopyToClipboard({
 
 		return ok
 	}
-
-		let lastT = 0
-		let lastS = "idle"
-		createRenderEffect(
-			() => {
-				// track the dependencies so the effect re-runs on change
-				lastT = ticket()
-				lastS = status()
-			},
-			() => {
-				const t = lastT
-				const s = lastS
-				onSettled(() => {
-					if (t === 0 || s === "idle") return
-					const id = setTimeout(() => setStatus("idle"), timeout)
-					onCleanup(() => clearTimeout(id))
-				})
-			},
-		)
 
 	return {copy, reset, status, copied: () => status() === "copied"}
 }
@@ -161,10 +152,12 @@ export function CopyButton(props: CopyButtonProps) {
 			onClick={() => {
 				void copy(props.value)
 			}}
-			press={props.disabled || reduced() ? undefined : {y: 1}}
-			transition={CELL as any}
+			{...({
+				whileTap: () => props.disabled || reduced() ? undefined : {y: 1},
+				transition: CELL,
+			} as any)}
 			style={"border-radius: 9px; touch-action: manipulation"}
-			class={`inline-flex h-9 select-none items-center gap-2 rounded-[9px] border border-stone-200 bg-white px-3 text-[13px] font-medium text-stone-700 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(28,25,23,0.06),0_1px_2px_rgba(28,25,23,0.08)] outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:bg-stone-50 focus-visible:border-[#4568FF] focus-visible:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_10px_20px_-14px_rgba(69,104,255,0.6)] disabled:opacity-50 dark:border-white/[0.16] dark:bg-[#252522] dark:text-stone-200 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_2px_rgba(0,0,0,0.4)] dark:hover:bg-[#2A2A27] dark:focus-visible:border-[#93B0FF] dark:focus-visible:shadow-[0_10px_20px_-14px_rgba(147,176,255,0.5)] ${props.class ?? ""}`}
+			class={`inline-flex h-9 select-none items-center gap-2 rounded-[9px] border border-stone-200 bg-white px-3 text-[13px] font-medium text-stone-700 shadow-[inset_0_1.5px_0_rgba(255,255,255,0.95),inset_0_-1px_0_rgba(28,25,23,0.06),0_1px_2px_rgba(28,25,23,0.08)] outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:bg-stone-50 focus-visible:border-[#4568FF] focus-visible:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_10px_20px_-14px_rgba(69,104,255,0.6)] disabled:opacity-50 dark:border-white/[0.16] dark:bg-[#252522] dark:text-stone-200 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_2px_rgba(0,0,0,0.4)] dark:hover:bg-stone-50 dark:focus-visible:border-[#93B0FF] dark:focus-visible:shadow-[0_10px_20px_-14px_rgba(147,176,255,0.5)] ${props.class ?? ""}`}
 		>
 			<span class="grid size-[14px] shrink-0" aria-hidden="true">
 				<Motion.svg
@@ -250,8 +243,8 @@ export function CopyButton(props: CopyButtonProps) {
 				{status() === "copied"
 					? (props.copiedLabel ?? "Copied")
 					: status() === "error"
-						? (props.errorLabel ?? "Failed")
-						: ""}
+					? (props.errorLabel ?? "Failed")
+					: ""}
 			</span>
 		</Motion.button>
 	)

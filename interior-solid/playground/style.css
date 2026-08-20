@@ -1,0 +1,223 @@
+@import "tailwindcss";
+@source "../src";
+
+/* Geist — interior.dev's voice (globals.css uses next/font Geist; we use
+   fontsource so the playground carries the same typeface without Next). */
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─────────────────────────────────────────────────────────────
+   interior.dev design tokens — ported verbatim from app/globals.css
+   (the source of truth). Three materials: bezel / panel / well.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --bezel: #ffffff;
+  --panel: #ffffff;
+  --well: #ffffff;
+  --sub: #fafafa;
+
+  --hairline: rgba(0, 0, 0, 0.14);
+  --hairline-strong: rgba(0, 0, 0, 0.26);
+
+  --ink: #131313;
+  --ink-2: #454545;
+  --ink-3: #6e6e6e;
+
+  --accent: #4568ff;
+  --accent-soft: #edf1ff;
+  --moss: #3d7a4e;
+  --flag: #c0442f;
+
+  --shadow-float: 0 28px 56px -24px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.11);
+  --shadow-well: inset 0 1px 2px rgba(0, 0, 0, 0.05),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  --shadow-cap: 0 1.5px 0 rgba(0, 0, 0, 0.09),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.11);
+  --shadow-row: inset 0 0 0 1px rgba(0, 0, 0, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.dark {
+  --bezel: #141312;
+  --panel: #1d1d1a;
+  --well: #252522;
+  --sub: #1a1a17;
+
+  --hairline: rgba(255, 255, 255, 0.16);
+  --hairline-strong: rgba(255, 255, 255, 0.28);
+
+  --ink: #f8f8f4;
+  --ink-2: #c2c2ba;
+  --ink-3: #93938b;
+
+  --accent: #93b0ff;
+  --accent-soft: rgba(147, 176, 255, 0.14);
+  --moss: #5bd79c;
+  --flag: #f5897f;
+
+  --shadow-float: 0 28px 56px -22px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-well: inset 0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow-cap: 0 1.5px 0 rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow-row: inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+@theme inline {
+  --color-bezel: var(--bezel);
+  --color-panel: var(--panel);
+  --color-well: var(--well);
+  --color-sub: var(--sub);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-moss: var(--moss);
+  --color-flag: var(--flag);
+
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--bezel);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* ── the three materials ───────────────────────────────────── */
+.mat-panel {
+  background: var(--panel);
+  box-shadow: var(--shadow-lift);
+}
+.mat-float {
+  background: var(--panel);
+  box-shadow: var(--shadow-float);
+}
+.mat-well {
+  background: var(--well);
+  box-shadow: var(--shadow-well);
+}
+.mat-cap {
+  background: var(--panel);
+  box-shadow: var(--shadow-cap);
+}
+.mat-row {
+  background: var(--well);
+  box-shadow: var(--shadow-row);
+}
+
+/* hairline divider (dividing compartments, not elevation) */
+.hairline {
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+
+/* ── typography ────────────────────────────────────────────── */
+.meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── scroll containers fade at both ends, never hard-cut ───── */
+.fade-y {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 14px,
+    black calc(100% - 22px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 14px,
+    black calc(100% - 22px),
+    transparent
+  );
+}
+.no-bar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.no-bar {
+  scrollbar-width: none;
+}
+
+/* ── indeterminate progress (loops natively; solid-motionone only
+   animates initial→animate once at mount, so the looping bar uses CSS) ── */
+@keyframes is-progress-indeterminate {
+	0% { transform: translateX(-100%); }
+	60% { transform: translateX(100%); }
+	100% { transform: translateX(100%); }
+}
+.is-indeterminate {
+	animation: is-progress-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+
+/* ── press ─────────────────────────────────────────────────── */
+.press {
+	transition:
+		transform 0.12s cubic-bezier(0.23, 1, 0.32, 1),
+		background-color 0.15s ease;
+}
+.press:active {
+  transform: translateY(1px);
+}
+
+/* ── focus ─────────────────────────────────────────────────── */
+@layer base {
+  :where(a, button, input, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+
+/* ── reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
