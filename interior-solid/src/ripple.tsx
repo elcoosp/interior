@@ -1,4 +1,4 @@
-import {createSignal, For, onCleanup} from "solid-js"
+import {createMemo, createSignal, For, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
 import {effect} from "./effect.js"
@@ -173,6 +173,9 @@ export type RippleProps = {
 export function Ripple(props: RippleProps) {
 	const {bind, ripples, fadeDuration} = useRipple({disabled: props.disabled, max: props.max})
 	const reduced = usePrefersReducedMotion()
+	// Tracked memo: the <For> `each` reads ripples() via this memo (cached), so
+	// the signal read happens in a tracked scope, not the untracked body.
+	const ripplesList = createMemo(() => ripples())
 
 	return (
 		<button
@@ -187,7 +190,7 @@ export function Ripple(props: RippleProps) {
 				aria-hidden="true"
 				class="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
 			>
-				<For each={ripples()}>
+				<For each={ripplesList()}>
 					{(r) => (
 						<Motion.span
 							class={`absolute block rounded-full ${props.tintClassName ?? "bg-stone-800/15 dark:bg-white/20"}`}

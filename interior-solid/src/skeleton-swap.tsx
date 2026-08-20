@@ -73,15 +73,17 @@ export type SkeletonSwapProps = {
 }
 
 export function SkeletonSwap(props: SkeletonSwapProps) {
-	// Static layout values — read props once (they don't change reactively
-	// here) so the `style` attributes below never build reactive getters that
-	// devComponent enumerates in untrack (no STRICT_READ_UNTRACKED).
-	const linesVal = props.lines ?? 3
-	const lineHeightVal = props.lineHeight ?? 21
-	const barHeightVal = props.barHeight ?? 9
-	const boxVal = props.reserve ?? linesVal * lineHeightVal
+	// Static layout values. Read the reactive props in a tracked memo, then
+	// call the memo (cached) wherever used — never the raw getter in an
+	// untracked component/For body (no STRICT_READ_UNTRACKED).
+	const linesVal = createMemo(() => props.lines ?? 3)
+	const lineHeightVal = createMemo(() => props.lineHeight ?? 21)
+	const barHeightVal = createMemo(() => props.barHeight ?? 9)
+	const boxVal = createMemo(() => props.reserve ?? linesVal() * lineHeightVal())
 
 	const ready = createMemo(() => unwrap(props.ready))
+	const labelText = createMemo(() => props.label)
+	const cls = createMemo(() => props.class)
 	const {showSkeleton} = useSkeletonSwap({
 		ready,
 		delay: props.delay,
@@ -140,9 +142,9 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 		<div
 			ref={shell}
 			aria-busy={ready() ? "false" : "true"}
-			aria-label={unwrap(props.label)}
-			style={{height: `${boxVal}px`}}
-			class={`relative grid overflow-y-auto overscroll-contain text-stone-700 dark:text-stone-200 ${props.class ?? ""}`}
+			aria-label={unwrap(labelText())}
+			style={{height: `${boxVal()}px`}}
+			class={`relative grid overflow-y-auto overscroll-contain text-stone-700 dark:text-stone-200 ${cls() ?? ""}`}
 		>
 			<Motion.div
 				ref={body}
@@ -169,17 +171,17 @@ export function SkeletonSwap(props: SkeletonSwapProps) {
 						fallback={props.skeleton}
 					>
 						<div class="w-full">
-							<For each={Array.from({length: linesVal}, (_, i) => i)}>
+							<For each={Array.from({length: linesVal()}, (_, i) => i)}>
 								{i => (
 									<div
 										class="flex items-center"
-										style={{height: `${lineHeightVal}px`}}
+										style={{height: `${lineHeightVal()}px`}}
 									>
 										<div
 											class="rounded-[5px] bg-stone-200 dark:bg-white/15"
 											style={{
-												height: `${barHeightVal}px`,
-												width: `${widthFor(i, linesVal)}%`,
+												height: `${barHeightVal()}px`,
+												width: `${widthFor(i, linesVal())}%`,
 											}}
 										/>
 									</div>
