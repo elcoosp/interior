@@ -3,7 +3,7 @@
  * so every demo tracks the components as you port them. Solid 2.0 RC toolchain.
  * The shell uses the interior.dev design system (bezel/panel/well materials,
  * Geist, ink/accent tokens) — see playground/style.css. */
-import {render} from "@solidjs/web";
+import {render, Dynamic} from "@solidjs/web";
 import {createSignal, createEffect, createRenderEffect, For, Show} from "solid-js";
 import * as IS from "interior-solid";
 import "../style.css";
@@ -14,87 +14,62 @@ const demos: Demo[] = [
 	{
 		slug: "ripple",
 		title: "Ripple",
-		render: () => <IS.Ripple onPress={() => console.log("pressed")}>Press me</IS.Ripple>,
+		render: RippleDemo,
 	},
 	{
 		slug: "press-depth",
 		title: "PressDepth",
-		render: () => (
-			<IS.PressDepth onClick={() => console.log("depth")} aria-label="Press depth">
-				Press depth
-			</IS.PressDepth>
-		),
+		render: PressDepthDemo,
 	},
 	{
 		slug: "loading-button",
 		title: "LoadingButton",
-		render: () => (
-			<IS.LoadingButton
-				onAction={() => new Promise((r) => setTimeout(r, 1200))}
-				pendingLabel="Working…"
-				successLabel="Saved"
-				resetAfter={1500}
-			>
-				Save
-			</IS.LoadingButton>
-		),
+		render: LoadingButtonDemo,
 	},
 	{
 		slug: "progress-bar",
 		title: "ProgressBar",
-		render: () => <ProgressBarDemo />,
+		render: ProgressBarDemo,
 	},
 	{
 		slug: "copy-button",
 		title: "CopyButton",
-		render: () => (
-			<IS.CopyButton value="hello@interior.dev" copiedLabel="Copied!" label="Copy email" />
-		),
+		render: CopyButtonDemo,
 	},
 	{
 		slug: "expanding-search",
 		title: "ExpandingSearch",
-		render: () => <ExpandingSearchDemo />,
+		render: ExpandingSearchDemo,
 	},
 	{
 		slug: "blur-up-image",
 		title: "BlurUpImage",
-		render: () => (
-			<IS.BlurUpImage
-				alt="Demo image"
-				width={320}
-				height={200}
-				color="#e7e5e4"
-				src="https://picsum.photos/seed/interior/320/200"
-			/>
-		),
+		render: BlurUpImageDemo,
 	},
 	{
 		slug: "text-reveal",
 		title: "TextReveal",
-				render: () => (
-					<IS.TextReveal class="text-2xl font-medium" text="Solid 2.0 micro-interactions, ported faithfully." />
-				),
+		render: TextRevealDemo,
 	},
 	{
 		slug: "modal",
 		title: "Modal",
-		render: () => <ModalDemo />,
+		render: ModalDemo,
 	},
 	{
 		slug: "tooltip",
 		title: "Tooltip + TooltipGroup",
-		render: () => <TooltipDemo />,
+		render: TooltipDemo,
 	},
 	{
 		slug: "segmented-control",
 		title: "SegmentedControl",
-		render: () => <SegmentedDemo />,
+		render: SegmentedDemo,
 	},
 	{
 		slug: "skeleton-swap",
 		title: "SkeletonSwap",
-		render: () => <SkeletonDemo />,
+		render: SkeletonDemo,
 	},
 ];
 
@@ -113,6 +88,58 @@ function ExpandingSearchDemo() {
 			onSubmit={(v) => console.log("search:", v)}
 			placeholder="Search…"
 			align="left"
+		/>
+	);
+}
+
+function RippleDemo() {
+	return <IS.Ripple onPress={() => console.log("pressed")}>Press me</IS.Ripple>;
+}
+
+function PressDepthDemo() {
+	return (
+		<IS.PressDepth onClick={() => console.log("depth")} aria-label="Press depth">
+			Press depth
+		</IS.PressDepth>
+	);
+}
+
+function LoadingButtonDemo() {
+	return (
+		<IS.LoadingButton
+			onAction={() => new Promise((r) => setTimeout(r, 1200))}
+			pendingLabel="Working…"
+			successLabel="Saved"
+			resetAfter={1500}
+		>
+			Save
+		</IS.LoadingButton>
+	);
+}
+
+function CopyButtonDemo() {
+	return (
+		<IS.CopyButton value="hello@interior.dev" copiedLabel="Copied!" label="Copy email" />
+	);
+}
+
+function BlurUpImageDemo() {
+	return (
+		<IS.BlurUpImage
+			alt="Demo image"
+			width={320}
+			height={200}
+			color="#e7e5e4"
+			src="https://picsum.photos/seed/interior/320/200"
+		/>
+	);
+}
+
+function TextRevealDemo() {
+	return (
+		<IS.TextReveal
+			class="text-2xl font-medium"
+			text="Solid 2.0 micro-interactions, ported faithfully."
 		/>
 	);
 }
@@ -249,8 +276,10 @@ function App() {
 
 				{/* content — a lifted panel floating on the bezel */}
 				<main class="mat-panel min-h-[60vh] flex-1 rounded-[20px] p-8">
-					<h2 class="mb-6 text-lg font-semibold text-ink">{current().title}</h2>
-					<Show when={current()}>{current().render()}</Show>
+					<Show when={current()}>
+						<h2 class="mb-6 text-lg font-semibold text-ink">{current().title}</h2>
+						<Dynamic component={current().render} />
+					</Show>
 				</main>
 			</div>
 		</div>

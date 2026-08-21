@@ -277,10 +277,10 @@ export function ExpandingSearch({
 	// recomputes a signal when dirty — trips STRICT_READ_UNTRACKED. Reading a
 	// plain `.current` returns the last value with no signal read at all; the
 	// effects below keep the refs live (tracked).
-	const openRef = {current: open()}
-	const focusedRef = {current: focused()}
-	const queryRef = {current: query()}
-	const filledRef = {current: query().length > 0}
+	const openRef = {current: false}
+	const focusedRef = {current: false}
+	const queryRef = {current: ""}
+	const filledRef = {current: false}
 	effect(() => open(), (v) => { openRef.current = v })
 	effect(() => focused(), (v) => { focusedRef.current = v })
 	effect(() => query(), (v) => { queryRef.current = v })
@@ -341,6 +341,11 @@ export function ExpandingSearch({
 	const shellAnimRef = {current: {width: `${COLLAPSED}px`} as Record<string, string>}
 	const inputAnimRef = {current: {opacity: 0, width: "0px"} as Record<string, unknown>}
 	const triggerAnimRef = {current: {x: 0}}
+	// `resultCount` is a memo over a (typically static) prop; reading it in an
+	// untracked JSX expression trips STRICT_READ. Mirror it into a plain ref
+	// via a tracked effect and read `.current` in the markup.
+	const resultCountRef = {current: undefined as number | undefined}
+	effect(() => resultCount(), (v) => { resultCountRef.current = v })
 	effect(() => expanded(), (v) => { expandedRef.current = v })
 	effect(() => inner(), (v) => { innerRef.current = v })
 	effect(() => open() ? `${expanded()}px` : `${COLLAPSED}px`, (v) => { shellAnimRef.current = {width: v} })
@@ -367,7 +372,7 @@ export function ExpandingSearch({
 				onMouseDown={(event: MouseEvent) => {
 					if (event.target !== event.currentTarget) return
 					event.preventDefault()
-					if (untrack(open)) inputRef.current?.focus()
+					if (openRef.current) inputRef.current?.focus()
 				}}
 				initial={{width: `${COLLAPSED}px`}}
 				animate={() => shellAnimRef.current}
@@ -403,12 +408,12 @@ export function ExpandingSearch({
 					transition={inputTrans}
 					class="pointer-events-none absolute inset-y-0 right-[7px] flex items-center gap-1.5"
 				>
-					{resultCount() === undefined ? null : (
+					{resultCountRef.current === undefined ? null : (
 						<span
 							aria-hidden="true"
 							class="w-8 truncate text-right font-mono text-[9.5px] tabular-nums text-stone-500 dark:text-stone-400"
 						>
-							{filledRef.current ? resultCount() : ""}
+							{filledRef.current ? resultCountRef.current : ""}
 						</span>
 					)}
 
