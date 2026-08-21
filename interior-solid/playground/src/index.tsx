@@ -286,4 +286,13 @@ function App() {
 	);
 }
 
+// Version banner: prints the resolved interior-solid build so a stale tab is
+// obvious. If you reload and DON'T see this line (or see an old hash), your
+// tab is frozen on a dead dev-server module — close it and reopen :4000.
+console.log(
+  `%cinterior-solid playground%c commit f2d9c92 — STRICT_READ/NO_OWNER expected: 0`,
+  "color:#4568FF;font-weight:bold",
+  "color:#888",
+);
+
 render(() => <App />, document.getElementById("root")!);

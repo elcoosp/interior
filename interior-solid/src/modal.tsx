@@ -471,7 +471,6 @@ export function Modal(props: ModalProps) {
 		class: "absolute inset-0 bg-stone-900/40 dark:bg-black/65",
 	} as any
 	const panelProps2 = {
-		"aria-hidden": "true",
 		variants: vv.panel,
 		style: {maxWidth: props.maxWidth ?? 440, maxHeight: props.maxHeight ?? "min(78vh, 620px)"},
 		class: `relative flex w-full flex-col overflow-hidden rounded-[14px] border border-stone-200 bg-white text-stone-700 shadow-[0_28px_56px_-24px_rgba(24,22,20,0.45)] outline-none dark:border-white/[0.16] dark:bg-[#1D1D1A] dark:text-stone-200 ${props.class ?? ""}`,

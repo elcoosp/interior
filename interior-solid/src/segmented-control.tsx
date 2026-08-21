@@ -49,6 +49,15 @@ export function SegmentedControl(props: SegmentedControlProps) {
 		return found < 0 ? 0 : found;
 	};
 	const labelFor = (i: number) => options()[i]?.label ?? "";
+	// `indexFor` reads `options` (a memo) directly. Called inside the tracked
+	// `index()` memo or JSX expressions it does NOT trip STRICT_READ because
+	// those run in a tracking scope; it must never be called inside the
+	// untracked <For> mapper (which is where options().indexOf(option) did).
+	const indexFor = (value: string) => {
+		const opts = options();
+		const found = opts.findIndex((o) => o.value === value);
+		return found < 0 ? 0 : found;
+	};
 
 	const select = (next: string) => {
 		const before = current();
@@ -128,7 +137,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 							class={`${SEG} pointer-events-none ${
 								option.disabled
 									? "text-stone-300 dark:text-stone-600"
-									: hovered() === options().indexOf(option) && options().indexOf(option) !== index()
+																	: hovered() === indexFor(option.value) && indexFor(option.value) !== index()
 										? "text-stone-700 dark:text-stone-200"
 										: "text-stone-500 dark:text-stone-400"
 							}`}
@@ -178,22 +187,21 @@ export function SegmentedControl(props: SegmentedControlProps) {
 					onPointerLeave={() => setHovered(-1)}
 				>
 					<For each={options()}>
-						{(option) => {
-							const i = options().indexOf(option);
+						{(option, i) => {
 							return (
 								<button
 									ref={(node) => {
-										buttons[i] = node;
+										buttons[i()] = node;
 									}}
 									type="button"
 									role="radio"
 									aria-disabled={option.disabled ? "true" : undefined}
 									onClick={() => !option.disabled && select(option.value)}
-									onKeyDown={(e) => onKeyDown(e, i)}
-									onPointerEnter={() => !option.disabled && setHovered(i)}
+									onKeyDown={(e) => onKeyDown(e, i())}
+									onPointerEnter={() => !option.disabled && setHovered(i())}
 									class="cursor-default rounded-[6px] outline-none focus-visible:bg-[#4568FF]/[0.06] focus-visible:shadow-[inset_0_0_0_1px_#4568FF] dark:focus-visible:bg-[#93B0FF]/[0.08] dark:focus-visible:shadow-[inset_0_0_0_1px_#93B0FF]"
 								>
-									<span class="sr-only">{labelFor(i)}</span>
+									<span class="sr-only">{labelFor(i())}</span>
 								</button>
 							);
 						}}

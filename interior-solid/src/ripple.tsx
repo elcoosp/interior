@@ -1,7 +1,6 @@
 import {createMemo, createSignal, For, onCleanup} from "solid-js"
 import {Motion} from "solid-motionone"
 import {usePrefersReducedMotion} from "./use-prefers-reduced-motion.js"
-import {effect} from "./effect.js"
 
 const EASE = [0.23, 1, 0.32, 1] as const
 const BLOOM = {duration: 0.5, ease: "linear"} as const
@@ -117,21 +116,19 @@ export function useRipple({
 		release(id)
 	}
 
-	effect(
-		() => true,
-		() => {
-			const bail = () => releaseAll()
-			const onVisibility = () => document.hidden && releaseAll()
-			window.addEventListener("blur", bail)
-			document.addEventListener("visibilitychange", onVisibility)
-			onCleanup(() => {
-				window.removeEventListener("blur", bail)
-				document.removeEventListener("visibilitychange", onVisibility)
-				timers.forEach((set) => set.forEach(clearTimeout))
-				timers.clear()
-			})
-		},
-	)
+	// Register global listeners once, in the caller's owner scope (the hook
+	// body has an owner). Do NOT put onCleanup inside effect()'s render — that
+	// runs untracked (rAF) with no owner and trips NO_OWNER_CLEANUP.
+	const bail = () => releaseAll();
+	const onVisibility = () => document.hidden && releaseAll();
+	window.addEventListener("blur", bail);
+	document.addEventListener("visibilitychange", onVisibility);
+	onCleanup(() => {
+		window.removeEventListener("blur", bail);
+		document.removeEventListener("visibilitychange", onVisibility);
+		timers.forEach((set) => set.forEach(clearTimeout));
+		timers.clear();
+	});
 
 	const bind = {
 		onPointerDown: (e: PointerEvent & {currentTarget: HTMLElement}) => {
