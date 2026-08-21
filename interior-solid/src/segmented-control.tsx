@@ -187,21 +187,21 @@ export function SegmentedControl(props: SegmentedControlProps) {
 					onPointerLeave={() => setHovered(-1)}
 				>
 					<For each={options()}>
-						{(option, i) => {
+						{(option) => {
 							return (
 								<button
 									ref={(node) => {
-										buttons[i()] = node;
+										buttons[indexFor(option.value)] = node;
 									}}
 									type="button"
 									role="radio"
 									aria-disabled={option.disabled ? "true" : undefined}
 									onClick={() => !option.disabled && select(option.value)}
-									onKeyDown={(e) => onKeyDown(e, i())}
-									onPointerEnter={() => !option.disabled && setHovered(i())}
+									onKeyDown={(e) => onKeyDown(e, indexFor(option.value))}
+									onPointerEnter={() => !option.disabled && setHovered(indexFor(option.value))}
 									class="cursor-default rounded-[6px] outline-none focus-visible:bg-[#4568FF]/[0.06] focus-visible:shadow-[inset_0_0_0_1px_#4568FF] dark:focus-visible:bg-[#93B0FF]/[0.08] dark:focus-visible:shadow-[inset_0_0_0_1px_#93B0FF]"
 								>
-									<span class="sr-only">{labelFor(i())}</span>
+									<span class="sr-only">{labelFor(indexFor(option.value))}</span>
 								</button>
 							);
 						}}

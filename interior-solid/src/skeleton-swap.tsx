@@ -1,4 +1,4 @@
-import {createEffect, createMemo, createSignal, For, onCleanup, Show} from "solid-js"
+import {createEffect, createMemo, createSignal, For, Show} from "solid-js"
 import {Motion} from "solid-motionone"
 import {effect} from "./effect.js"
 import {unwrap} from "./unwrap.js"
@@ -44,14 +44,13 @@ export function useSkeletonSwap(options: UseSkeletonSwapOptions) {
 					shownAt = performance.now()
 					setVisible(true)
 				}, d)
-				onCleanup(() => clearTimeout(t))
-				return
+				return () => clearTimeout(t)
 			}
 
 			if (!isVisible) return
 			const rest = Math.max(0, min - (performance.now() - shownAt))
 			const t = setTimeout(() => { setVisible(false) }, rest)
-			onCleanup(() => clearTimeout(t))
+			return () => clearTimeout(t)
 		},
 	)
 
