@@ -341,7 +341,12 @@ export function ExpandingSearch({
 	effect(() => Math.max(COLLAPSED, track()), (v) => { setExpandedState(v) })
 	const expanded = expandedState
 	const rightInset = createMemo(() => CLEAR_SLOT + (resultCount() === undefined ? 0 : COUNT_SLOT))
-	const inner = createMemo(() => Math.max(0, expanded() - TEXT_LEFT - rightInset()))
+	// `inner` reads the raw `expanded()` signal; under RC's body-untrack its
+	// eager memo compute would read expanded() untracked -> STRICT_READ. Drive
+	// a plain signal from a tracked effect instead (compute reads tracked).
+	const [innerState, setInnerState] = createSignal(0)
+	effect(() => Math.max(0, expanded() - TEXT_LEFT - rightInset()), (v) => { setInnerState(v) })
+	const inner = innerState
 
 	// Refs mirroring the animation values consumed by the *untracked* Motion
 	// `animate`/`initial` arrows (solid-motionone's rAF loop calls them every
