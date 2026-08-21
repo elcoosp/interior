@@ -85,12 +85,14 @@ export function useExpandingSearch({
 	const inputRef: {current: HTMLInputElement | null} = {current: null}
 	const triggerRef: {current: HTMLButtonElement | null} = {current: null}
 	const timer: {current: ReturnType<typeof setTimeout> | null} = {current: null}
-	// `isOpenRef`/`queryRef` mirror `openRef`: plain mutable holders updated by
-	// effects (tracked) and READ by the untracked function-valued Motion arrows
-	// (triggerProps/inputProps). Reading a plain `.current` in those arrows never
-	// trips STRICT_READ_UNTRACKED, while the effects keep the values live.
-	const isOpenRef = {current: untrack(isOpen)}
-	const queryRef = {current: untrack(query)}
+	// `isOpenRef`/`queryRef` are plain mutable holders updated by effects
+	// (tracked) and READ by the untracked function-valued Motion arrows
+	// (triggerProps/inputProps) and by debounced callbacks. Reading a plain
+	// `.current` never trips STRICT_READ_UNTRACKED. The initial value is a safe
+	// default — the effects below populate the real value on the first tracked
+	// run, before any untracked arrow/callback fires.
+	const isOpenRef = {current: false}
+	const queryRef = {current: ""}
 	effect(
 		() => isOpen(),
 		(v) => { isOpenRef.current = v },
@@ -100,14 +102,7 @@ export function useExpandingSearch({
 		(v) => { queryRef.current = v },
 	)
 
-	// Read the initial open/query state once, outside the reactive scope, so we
-	// don't trip Solid 2.0 RC STRICT_READ_UNTRACKED (these reads happen in the
-	// untracked component body).
-	const openRef = {current: untrack(isOpen)}
-	const initialQuery = untrack(query)
-
 	const latest = {
-		query: initialQuery,
 		onChange,
 		onSearch,
 		onSubmit,
@@ -116,6 +111,9 @@ export function useExpandingSearch({
 	const latestRef = {current: latest}
 	latestRef.current = latest
 
+	// Plain holder for the open state, updated by the effect below (tracked).
+	// Read by setOpen/toggle without touching a signal in untracked scopes.
+	const openRef = {current: false}
 	effect(
 		() => isOpen(),
 		(o) => {
@@ -140,7 +138,7 @@ export function useExpandingSearch({
 		if (timer.current) clearTimeout(timer.current)
 		timer.current = setTimeout(() => {
 			timer.current = null
-			latestRef.current.onSearch?.(latestRef.current.query)
+			latestRef.current.onSearch?.(queryRef.current)
 		}, debounce)
 	}
 
@@ -148,7 +146,7 @@ export function useExpandingSearch({
 		if (!timer.current) return
 		clearTimeout(timer.current)
 		timer.current = null
-		latestRef.current.onSearch?.(latestRef.current.query)
+		latestRef.current.onSearch?.(queryRef.current)
 	}
 
 	const expand = () => {
@@ -180,7 +178,7 @@ export function useExpandingSearch({
 		setFocused(false)
 		if (!collapseOnBlur) return
 		if (!document.hasFocus()) return
-		if (latestRef.current.query.length > 0) return
+		if (queryRef.current.length > 0) return
 		setOpen(false)
 	}
 
@@ -188,7 +186,7 @@ export function useExpandingSearch({
 		if (event.key === "Escape") {
 			event.preventDefault()
 			event.stopPropagation()
-			if (latestRef.current.query.length > 0) {
+			if (queryRef.current.length > 0) {
 				commit("")
 				return
 			}
@@ -198,7 +196,7 @@ export function useExpandingSearch({
 		if (event.key === "Enter") {
 			event.preventDefault()
 			flush()
-			latestRef.current.onSubmit?.(latestRef.current.query)
+			latestRef.current.onSubmit?.(queryRef.current)
 		}
 	}
 
@@ -272,15 +270,21 @@ export function ExpandingSearch({
 	const {open, focused, query, clear, inputRef, rootProps, triggerProps, inputProps} =
 		useExpandingSearch(options)
 
-	// Memo aliases for the signals consumed inside *untracked* function-valued
-	// Motion attributes (class/animate/tabIndex/aria-expanded arrows). solid-motionone's
-	// rAF loop invokes those arrows in an untracked scope every frame, so reading a
-	// raw signal there trips STRICT_READ_UNTRACKED. Reading a memo in an untracked
-	// scope returns its cached value without re-reading the underlying signal (when
-	// not dirty), so these accessors are safe to call from the arrows.
-	const openM = createMemo(() => open())
-	const focusedM = createMemo(() => focused())
-	const filledM = createMemo(() => query().length > 0)
+	// Plain refs mirroring the signals consumed inside *untracked*
+	// function-valued Motion attributes (class/animate/tabIndex/aria-expanded
+	// arrows). solid-motionone's rAF loop invokes those arrows in an untracked
+	// scope every frame, so reading a raw signal — or even a memo that
+	// recomputes a signal when dirty — trips STRICT_READ_UNTRACKED. Reading a
+	// plain `.current` returns the last value with no signal read at all; the
+	// effects below keep the refs live (tracked).
+	const openRef = {current: open()}
+	const focusedRef = {current: focused()}
+	const queryRef = {current: query()}
+	const filledRef = {current: query().length > 0}
+	effect(() => open(), (v) => { openRef.current = v })
+	effect(() => focused(), (v) => { focusedRef.current = v })
+	effect(() => query(), (v) => { queryRef.current = v })
+	effect(() => query().length > 0, (v) => { filledRef.current = v })
 	const trackRef: {current: HTMLDivElement | null} = {current: null}
 	const [track, setTrack] = createSignal(0)
 
@@ -324,16 +328,30 @@ export function ExpandingSearch({
 	const expanded = createMemo(() => Math.max(COLLAPSED, track()))
 	const rightInset = createMemo(() => CLEAR_SLOT + (resultCount() === undefined ? 0 : COUNT_SLOT))
 	const inner = createMemo(() => Math.max(0, expanded() - TEXT_LEFT - rightInset()))
-	const filled = () => query().length > 0
+
+	// Refs mirroring the animation values consumed by the *untracked* Motion
+	// `animate`/`initial` arrows (solid-motionone's rAF loop calls them every
+	// frame). The memos above read signals (open/track/inner); reading a memo in
+	// an untracked arrow recomputes it — and thus re-reads the signal — untracked,
+	// tripping STRICT_READ_UNTRACKED. The effects below compute the same values
+	// in a tracked scope and stash them in plain refs; the arrows read `.current`
+	// with zero signal reads.
+	const expandedRef = {current: COLLAPSED}
+	const innerRef = {current: 0}
+	const shellAnimRef = {current: {width: `${COLLAPSED}px`} as Record<string, string>}
+	const inputAnimRef = {current: {opacity: 0, width: "0px"} as Record<string, unknown>}
+	const triggerAnimRef = {current: {x: 0}}
+	effect(() => expanded(), (v) => { expandedRef.current = v })
+	effect(() => inner(), (v) => { innerRef.current = v })
+	effect(() => open() ? `${expanded()}px` : `${COLLAPSED}px`, (v) => { shellAnimRef.current = {width: v} })
+	effect(() => ({opacity: open() ? 1 : 0, width: `${inner()}px`}), (v) => { inputAnimRef.current = v })
+	effect(() => align === "right" && open() ? -(expanded() - COLLAPSED) : 0, (v) => { triggerAnimRef.current = {x: v} })
 
 	const shellEase = reduced() ? "0ms" : "200ms cubic-bezier(0.32,0.72,0,1)"
 	const fadeEase = reduced() ? "0ms" : "150ms ease"
 
-	const shellAnim = createMemo(() => ({width: open() ? `${expanded()}px` : `${COLLAPSED}px`}))
 	const shellTrans = () => (reduced() ? {duration: 0} : {duration: 0.22, easing: [0.32, 0.72, 0, 1] as any})
-	const inputAnim = createMemo(() => ({opacity: open() ? 1 : 0, width: `${inner()}px`}))
 	const inputTrans = () => (reduced() ? {duration: 0} : {duration: 0.16})
-	const triggerAnim = createMemo(() => ({x: align === "right" && open() ? -(expanded() - COLLAPSED) : 0}))
 	const triggerTrans = () => (reduced() ? {duration: 0} : {duration: 0.22, easing: [0.32, 0.72, 0, 1] as any})
 
 	return (
@@ -352,12 +370,12 @@ export function ExpandingSearch({
 					if (untrack(open)) inputRef.current?.focus()
 				}}
 				initial={{width: `${COLLAPSED}px`}}
-				animate={() => shellAnim()}
+				animate={() => shellAnimRef.current}
 				transition={shellTrans}
 				class={() => `absolute inset-y-0 ${
 					align === "right" ? "right-0" : "left-0"
 				} overflow-hidden rounded-[10px] border-2 transition-[background-color,border-color,box-shadow] duration-150 ${
-					focusedM()
+					focusedRef.current
 						? "border-[#4568FF] bg-white dark:border-[#93B0FF] dark:bg-[#252522]"
 						: "border-stone-200 bg-stone-100/70 shadow-[inset_0_1px_2px_rgba(28,25,23,0.07)] dark:border-white/[0.08] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"
 				}`}
@@ -372,8 +390,8 @@ export function ExpandingSearch({
 					autoComplete="off"
 					spellCheck={false}
 					enterKeyHint="search"
-					initial={() => ({opacity: 0, width: `${inner()}px`})}
-					animate={() => inputAnim()}
+					initial={() => ({opacity: 0, width: `${innerRef.current}px`})}
+					animate={() => inputAnimRef.current}
 					transition={inputTrans}
 					style={{left: `${TEXT_LEFT}px`}}
 					class="absolute inset-y-0 bg-transparent text-[13px] leading-9 text-stone-700 outline-none focus-visible:outline-none placeholder:text-stone-400 dark:text-stone-200 dark:placeholder:text-stone-500 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
@@ -381,7 +399,7 @@ export function ExpandingSearch({
 
 				<Motion.div
 					initial={{opacity: 0}}
-					animate={() => ({opacity: openM() ? 1 : 0})}
+					animate={() => ({opacity: openRef.current ? 1 : 0})}
 					transition={inputTrans}
 					class="pointer-events-none absolute inset-y-0 right-[7px] flex items-center gap-1.5"
 				>
@@ -390,7 +408,7 @@ export function ExpandingSearch({
 							aria-hidden="true"
 							class="w-8 truncate text-right font-mono text-[9.5px] tabular-nums text-stone-500 dark:text-stone-400"
 						>
-							{filledM() ? resultCount() : ""}
+							{filledRef.current ? resultCount() : ""}
 						</span>
 					)}
 
@@ -398,13 +416,13 @@ export function ExpandingSearch({
 						type="button"
 						onClick={clear}
 						initial={{opacity: 0, scale: 0.86}}
-						animate={() => ({opacity: filledM() ? 1 : 0, scale: filledM() ? 1 : 0.86})}
+						animate={() => ({opacity: filledRef.current ? 1 : 0, scale: filledRef.current ? 1 : 0.86})}
 						transition={inputTrans}
-						tabindex={() => openM() && filledM() ? 0 : -1}
+						tabindex={() => openRef.current && filledRef.current ? 0 : -1}
 						aria-label="Clear search"
 						aria-controls={inputId}
 						class={() => `grid size-[22px] place-items-center rounded-[6px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] dark:text-stone-400 dark:focus-visible:outline-[#93B0FF] ${
-							open() && filledM() ? "pointer-events-auto" : "pointer-events-none"
+							openRef.current && filledRef.current ? "pointer-events-auto" : "pointer-events-none"
 						}`}
 					>
 						<svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
@@ -424,11 +442,11 @@ export function ExpandingSearch({
 				aria-label={label}
 				aria-controls={inputId}
 				initial={{x: 0}}
-				animate={() => triggerAnim()}
+				animate={() => triggerAnimRef.current}
 				transition={triggerTrans}
 				class={() => `absolute inset-y-0 z-10 grid w-10 place-items-center rounded-[8px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] disabled:opacity-50 dark:text-stone-400 dark:focus-visible:outline-[#93B0FF] ${
 					align === "right" ? "right-0" : "left-0"
-				} ${openM() ? "pointer-events-none" : ""}`}
+				} ${openRef.current ? "pointer-events-none" : ""}`}
 			>
 				<svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
 					<circle cx="6.4" cy="6.4" r="4.5" stroke="currentColor" stroke-width="1.4" />
