@@ -85,6 +85,21 @@ export function useExpandingSearch({
 	const inputRef: {current: HTMLInputElement | null} = {current: null}
 	const triggerRef: {current: HTMLButtonElement | null} = {current: null}
 	const timer: {current: ReturnType<typeof setTimeout> | null} = {current: null}
+	// `isOpenRef`/`queryRef` mirror `openRef`: plain mutable holders updated by
+	// effects (tracked) and READ by the untracked function-valued Motion arrows
+	// (triggerProps/inputProps). Reading a plain `.current` in those arrows never
+	// trips STRICT_READ_UNTRACKED, while the effects keep the values live.
+	const isOpenRef = {current: untrack(isOpen)}
+	const queryRef = {current: untrack(query)}
+	effect(
+		() => isOpen(),
+		(v) => { isOpenRef.current = v },
+	)
+	effect(
+		() => query(),
+		(v) => { queryRef.current = v },
+	)
+
 	// Read the initial open/query state once, outside the reactive scope, so we
 	// don't trip Solid 2.0 RC STRICT_READ_UNTRACKED (these reads happen in the
 	// untracked component body).
@@ -211,19 +226,21 @@ export function useExpandingSearch({
 			// Function-valued attrs: Solid treats the arrow as a static value
 			// (no reactive getter), and the fork's rAF attr loop calls it each
 			// frame — reactive without tripping devComponent's ownKeys enumeration.
-			"tabIndex": () => isOpen() ? -1 : 0,
-			"aria-expanded": () => isOpen(),
+			"tabIndex": () => isOpenRef.current ? -1 : 0,
+			"aria-expanded": () => isOpenRef.current,
 			onClick: expand,
 		} as any,
 		inputProps: {
 			ref: (node: HTMLInputElement | null) => {
 				inputRef.current = node
 			},
-			// `value` stays a static initial snapshot (untrack): the fork's rAF
-			// loop would otherwise fight user keystrokes on this controlled input.
-			value: untrack(query),
+			// `value` stays a static initial snapshot read from the ref (no
+			// signal read in this untracked attribute scope — avoids
+			// STRICT_READ_UNTRACKED). The fork's rAF loop would otherwise fight
+			// user keystrokes on this controlled input.
+			value: queryRef.current,
 			disabled,
-			"tabIndex": () => isOpen() ? 0 : -1,
+			"tabIndex": () => isOpenRef.current ? 0 : -1,
 			onChange: onInputChange,
 			onKeyDown: onInputKeyDown,
 			onFocus: onInputFocus,
@@ -255,6 +272,15 @@ export function ExpandingSearch({
 	const {open, focused, query, clear, inputRef, rootProps, triggerProps, inputProps} =
 		useExpandingSearch(options)
 
+	// Memo aliases for the signals consumed inside *untracked* function-valued
+	// Motion attributes (class/animate/tabIndex/aria-expanded arrows). solid-motionone's
+	// rAF loop invokes those arrows in an untracked scope every frame, so reading a
+	// raw signal there trips STRICT_READ_UNTRACKED. Reading a memo in an untracked
+	// scope returns its cached value without re-reading the underlying signal (when
+	// not dirty), so these accessors are safe to call from the arrows.
+	const openM = createMemo(() => open())
+	const focusedM = createMemo(() => focused())
+	const filledM = createMemo(() => query().length > 0)
 	const trackRef: {current: HTMLDivElement | null} = {current: null}
 	const [track, setTrack] = createSignal(0)
 
@@ -331,7 +357,7 @@ export function ExpandingSearch({
 				class={() => `absolute inset-y-0 ${
 					align === "right" ? "right-0" : "left-0"
 				} overflow-hidden rounded-[10px] border-2 transition-[background-color,border-color,box-shadow] duration-150 ${
-					focused()
+					focusedM()
 						? "border-[#4568FF] bg-white dark:border-[#93B0FF] dark:bg-[#252522]"
 						: "border-stone-200 bg-stone-100/70 shadow-[inset_0_1px_2px_rgba(28,25,23,0.07)] dark:border-white/[0.08] dark:bg-[#1D1D1A] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.45)]"
 				}`}
@@ -355,7 +381,7 @@ export function ExpandingSearch({
 
 				<Motion.div
 					initial={{opacity: 0}}
-					animate={() => ({opacity: open() ? 1 : 0})}
+					animate={() => ({opacity: openM() ? 1 : 0})}
 					transition={inputTrans}
 					class="pointer-events-none absolute inset-y-0 right-[7px] flex items-center gap-1.5"
 				>
@@ -364,7 +390,7 @@ export function ExpandingSearch({
 							aria-hidden="true"
 							class="w-8 truncate text-right font-mono text-[9.5px] tabular-nums text-stone-500 dark:text-stone-400"
 						>
-							{filled() ? resultCount() : ""}
+							{filledM() ? resultCount() : ""}
 						</span>
 					)}
 
@@ -372,13 +398,13 @@ export function ExpandingSearch({
 						type="button"
 						onClick={clear}
 						initial={{opacity: 0, scale: 0.86}}
-						animate={() => ({opacity: filled() ? 1 : 0, scale: filled() ? 1 : 0.86})}
+						animate={() => ({opacity: filledM() ? 1 : 0, scale: filledM() ? 1 : 0.86})}
 						transition={inputTrans}
-						tabindex={() => open() && filled() ? 0 : -1}
+						tabindex={() => openM() && filledM() ? 0 : -1}
 						aria-label="Clear search"
 						aria-controls={inputId}
 						class={() => `grid size-[22px] place-items-center rounded-[6px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] dark:text-stone-400 dark:focus-visible:outline-[#93B0FF] ${
-							open() && filled() ? "pointer-events-auto" : "pointer-events-none"
+							open() && filledM() ? "pointer-events-auto" : "pointer-events-none"
 						}`}
 					>
 						<svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
@@ -402,7 +428,7 @@ export function ExpandingSearch({
 				transition={triggerTrans}
 				class={() => `absolute inset-y-0 z-10 grid w-10 place-items-center rounded-[8px] text-stone-500 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#4568FF] disabled:opacity-50 dark:text-stone-400 dark:focus-visible:outline-[#93B0FF] ${
 					align === "right" ? "right-0" : "left-0"
-				} ${open() ? "pointer-events-none" : ""}`}
+				} ${openM() ? "pointer-events-none" : ""}`}
 			>
 				<svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
 					<circle cx="6.4" cy="6.4" r="4.5" stroke="currentColor" stroke-width="1.4" />
