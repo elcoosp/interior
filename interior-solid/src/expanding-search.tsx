@@ -79,8 +79,17 @@ export function useExpandingSearch({
 	const [ownOpen, setOwnOpen] = createSignal(defaultOpen)
 	const [focused, setFocused] = createSignal(false)
 
-	const query = createMemo(() => unwrap(value) ?? ownValue())
-	const isOpen = createMemo(() => unwrap(open) ?? ownOpen())
+	// Solid 2.0 RC runs the component body inside untrack(); a createMemo's
+	// eager initial compute would therefore read ownValue()/ownOpen() untracked
+	// and trip STRICT_READ. Drive plain signals from a tracked effect instead:
+	// its compute reads tracked (no warning) and the render writes the signal in
+	// rAF, outside any owner (same pattern as ./effect).
+	const [queryState, setQueryState] = createSignal(defaultValue)
+	const [openState, setOpenState] = createSignal(defaultOpen)
+	effect(() => unwrap(value) ?? ownValue(), (v) => { setQueryState(v) })
+	effect(() => unwrap(open) ?? ownOpen(), (v) => { setOpenState(v) })
+	const query = queryState
+	const isOpen = openState
 
 	const inputRef: {current: HTMLInputElement | null} = {current: null}
 	const triggerRef: {current: HTMLButtonElement | null} = {current: null}
@@ -325,7 +334,12 @@ export function ExpandingSearch({
 		},
 	)
 
-	const expanded = createMemo(() => Math.max(COLLAPSED, track()))
+	// `expanded` reads the raw `track()` signal; under RC's body-untrack its
+	// eager memo compute would read track() untracked -> STRICT_READ. Drive a
+	// plain signal from a tracked effect instead (compute reads tracked).
+	const [expandedState, setExpandedState] = createSignal(COLLAPSED)
+	effect(() => Math.max(COLLAPSED, track()), (v) => { setExpandedState(v) })
+	const expanded = expandedState
 	const rightInset = createMemo(() => CLEAR_SLOT + (resultCount() === undefined ? 0 : COUNT_SLOT))
 	const inner = createMemo(() => Math.max(0, expanded() - TEXT_LEFT - rightInset()))
 
